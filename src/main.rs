@@ -8,7 +8,7 @@ use args::Args;
 use clap::Parser;
 use dir_walker::walk;
 use futures::TryStreamExt;
-use linter::{FilePermissions, NoArchives, NoJunkFiles, Rule};
+use linter::{FilePermissions, NoArchives, NoJunkFiles, ObsoleteFormat, Rule};
 use std::{path::PathBuf, sync::mpsc};
 use ui::{Message, Report, Ui};
 
@@ -21,6 +21,7 @@ async fn main() {
         Box::new(NoJunkFiles),
         Box::new(NoArchives),
         Box::new(FilePermissions),
+        Box::new(ObsoleteFormat),
     ];
 
     let (tx, rx) = mpsc::channel();

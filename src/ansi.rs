@@ -12,9 +12,8 @@ pub fn green(s: impl Display) {
 }
 
 pub fn blue(s: impl Display) {
-    let mut stdout = io::stdout().lock();
-    write!(stdout, "\x1b[34m{}\x1b[0m", s).unwrap();
-    stdout.flush().unwrap();
+    print!("\x1b[34m{}\x1b[0m", s);
+    io::stdout().lock().flush().unwrap();
 }
 
 pub fn move_to_line_start() {

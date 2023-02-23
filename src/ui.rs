@@ -65,9 +65,13 @@ fn print_report(report: &Report) {
             let last = i == report.diagnostics.len() - 1;
 
             if last {
-                println!("  └── {}", diag.message);
+                println!("  └─ {}", diag.message);
             } else {
-                println!("  ├── {}", diag.message);
+                println!("  ├─ {}", diag.message);
+            }
+
+            for hint in &diag.hints {
+                println!("       {}", hint);
             }
         }
     }

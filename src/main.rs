@@ -1,5 +1,6 @@
 mod ansi;
 mod args;
+mod db;
 mod dir_walker;
 mod linter;
 mod ui;
@@ -8,13 +9,15 @@ use args::Args;
 use clap::Parser;
 use dir_walker::walk;
 use futures::TryStreamExt;
-use linter::{FilePermissions, NoArchives, NoJunkFiles, ObsoleteFormat, Rule};
+use linter::{FilePermissions, NoArchives, NoJunkFiles, ObsoleteFormat, Rule, UnknownRom};
 use std::{path::PathBuf, sync::mpsc};
 use ui::{Message, Report, Ui};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let args = Args::parse();
+    let db = db::DataFile::from_file(args.db.as_str());
+
     let path = PathBuf::from(args.cwd.as_str());
     let mut stream = Box::pin(walk(path).await.unwrap());
     let rules: Vec<Box<dyn Rule>> = vec![
@@ -22,10 +25,10 @@ async fn main() {
         Box::new(NoArchives),
         Box::new(FilePermissions),
         Box::new(ObsoleteFormat),
+        Box::new(UnknownRom::new(db)),
     ];
 
     let (tx, rx) = mpsc::channel();
-
     let ui_thread = std::thread::spawn(move || Ui::new(rx).run());
 
     loop {

@@ -8,6 +8,8 @@ use crate::{db::DataFile, dir_walker::FileMeta};
 const JUNK_FILES: [&'static str; 1] = ["txt"];
 const ARCHIVE_EXTENSIONS: [&'static str; 1] = ["7z"];
 const OBSOLETE_FORMATS: [&'static str; 2] = ["n64", "v64"];
+const COMPRESSED_FORMATS: [&'static str; 1] = ["zip"];
+const IGNORED_WORDS: [&'static str; 3] = ["a", "of", "the"];
 
 #[derive(Debug)]
 pub struct Diagnostic {
@@ -126,7 +128,8 @@ impl Rule for UnknownRom {
             let file_tokens = Tokens::from_str(path_str);
             let similar_titles = self.datafile.similar_to(&file_tokens);
             let mut hints = similar_titles
-                .map(|title| title.to_string())
+                .iter()
+                .map(|title| format!("* {}", title))
                 .collect::<Vec<_>>();
 
             if !hints.is_empty() {
@@ -165,11 +168,36 @@ impl<'a> Tokens<'a> {
     pub fn words_in_common_with(&self, other: &Tokens) -> usize {
         self.words
             .iter()
+            .filter(|word| !IGNORED_WORDS.contains(word))
             .filter(|word| other.words.contains(word))
             .count()
     }
 
     pub fn word_count(&self) -> usize {
         self.words.len()
+    }
+}
+
+pub struct UncompressedFile;
+
+impl Rule for UncompressedFile {
+    fn check(&self, entry: &FileMeta) -> Option<Diagnostic> {
+        let path = entry.entry.path();
+        let ext = path.extension();
+
+        let is_compressed = COMPRESSED_FORMATS
+            .iter()
+            .find(|&e| e == &ext.and_then(|e| e.to_str()).unwrap_or(""))
+            .is_some();
+
+        if is_compressed {
+            None
+        } else {
+            Some(Diagnostic {
+                path: entry.entry.path(),
+                message: "File is not compressed".to_string(),
+                hints: vec![],
+            })
+        }
     }
 }

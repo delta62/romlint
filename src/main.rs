@@ -9,7 +9,9 @@ use args::Args;
 use clap::Parser;
 use dir_walker::walk;
 use futures::TryStreamExt;
-use linter::{FilePermissions, NoArchives, NoJunkFiles, ObsoleteFormat, Rule, UnknownRom};
+use linter::{
+    FilePermissions, NoArchives, NoJunkFiles, ObsoleteFormat, Rule, UncompressedFile, UnknownRom,
+};
 use std::{path::PathBuf, sync::mpsc};
 use ui::{Message, Report, Ui};
 
@@ -26,6 +28,7 @@ async fn main() {
         Box::new(FilePermissions),
         Box::new(ObsoleteFormat),
         Box::new(UnknownRom::new(db)),
+        Box::new(UncompressedFile),
     ];
 
     let (tx, rx) = mpsc::channel();

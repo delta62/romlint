@@ -71,7 +71,11 @@ fn print_report(report: &Report) {
             }
 
             for hint in &diag.hints {
-                println!("       {}", hint);
+                if last {
+                    println!("       {}", hint);
+                } else {
+                    println!("  │    {}", hint);
+                }
             }
         }
     }

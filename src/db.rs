@@ -1,8 +1,7 @@
 use crate::linter::Tokens;
+use serde::Deserialize;
 use serde_xml_rs::from_str;
 use std::{fs::read_to_string, path::Path};
-
-use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct DataFile {
@@ -52,22 +51,30 @@ impl DataFile {
         self.games.iter().any(|game| game.name.as_str() == file)
     }
 
-    pub fn similar_to<'s, 'a: 's>(
-        &'s self,
-        tokens: &'a Tokens<'a>,
-    ) -> impl Iterator<Item = &'s str> {
-        self.games
+    pub fn similar_to<'s, 'a: 's>(&'s self, tokens: &'a Tokens<'a>) -> Vec<&'s str> {
+        let mut similarities = self
+            .games
             .iter()
-            .filter(|game| {
+            .filter_map(|game| {
                 let game_tokens = Tokens::from_str(game.name.as_str());
                 let same_words = tokens.words_in_common_with(&game_tokens);
 
-                if game_tokens.word_count() == 1 {
-                    same_words >= 1
+                if game_tokens.word_count() == 1 && same_words >= 1 {
+                    Some((same_words, game))
+                } else if same_words >= 2 {
+                    Some((same_words, game))
                 } else {
-                    same_words >= 2
+                    None
                 }
             })
-            .map(|game| game.name.as_str())
+            .collect::<Vec<_>>();
+
+        similarities.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+
+        similarities
+            .iter()
+            .take(5)
+            .map(|(_, game)| game.name.as_str())
+            .collect()
     }
 }

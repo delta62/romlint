@@ -3,14 +3,17 @@ mod args;
 mod db;
 mod dir_walker;
 mod linter;
+mod rules;
 mod ui;
+mod word_match;
 
 use args::Args;
 use clap::Parser;
 use dir_walker::walk;
 use futures::TryStreamExt;
-use linter::{
-    FilePermissions, NoArchives, NoJunkFiles, ObsoleteFormat, Rule, UncompressedFile, UnknownRom,
+use linter::Rule;
+use rules::{
+    FilePermissions, NoArchives, NoJunkFiles, ObsoleteFormat, UncompressedFile, UnknownRom,
 };
 use std::{path::PathBuf, sync::mpsc};
 use ui::{Message, Report, Ui};
@@ -19,9 +22,11 @@ use ui::{Message, Report, Ui};
 async fn main() {
     let args = Args::parse();
     let db = db::DataFile::from_file(args.db.as_str());
-
     let path = PathBuf::from(args.cwd.as_str());
     let mut stream = Box::pin(walk(path).await.unwrap());
+    let (tx, rx) = mpsc::channel();
+    let ui_thread = std::thread::spawn(move || Ui::new(rx).run());
+
     let rules: Vec<Box<dyn Rule>> = vec![
         Box::new(NoJunkFiles),
         Box::new(NoArchives),
@@ -30,9 +35,6 @@ async fn main() {
         Box::new(UnknownRom::new(db)),
         Box::new(UncompressedFile),
     ];
-
-    let (tx, rx) = mpsc::channel();
-    let ui_thread = std::thread::spawn(move || Ui::new(rx).run());
 
     loop {
         let next = stream.try_next().await;

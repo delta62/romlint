@@ -1,4 +1,4 @@
-use crate::linter::Tokens;
+use crate::word_match::Tokens;
 use serde::Deserialize;
 use serde_xml_rs::from_str;
 use std::{fs::read_to_string, path::Path};

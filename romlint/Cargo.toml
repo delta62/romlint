@@ -8,5 +8,6 @@ clap = { version = "4.1.6", features = ["derive"] }
 dir_walker = { path = "../dir_walker" }
 futures = "0.3.26"
 no_intro = { path = "../no_intro" }
+notify = { version = "5.1.0", default-features = false }
 tokio = { version = "1.25.0", features = ["macros", "rt", "fs", "io-util"] }
 zip = "0.6.4"

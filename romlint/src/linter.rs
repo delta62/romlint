@@ -1,4 +1,4 @@
-use dir_walker::FileMeta;
+use crate::filemeta::FileMeta;
 use std::path::PathBuf;
 
 #[derive(Debug)]

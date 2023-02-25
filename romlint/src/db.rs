@@ -27,9 +27,7 @@ impl Database {
                 let game_tokens = Tokens::from_str(game.name.as_str());
                 let same_words = tokens.words_in_common_with(&game_tokens);
 
-                if game_tokens.word_count() == 1 && same_words >= 1 {
-                    Some((same_words, game))
-                } else if same_words >= 2 {
+                if game_tokens.word_count() == 1 && same_words >= 1 || same_words >= 2 {
                     Some((same_words, game))
                 } else {
                     None

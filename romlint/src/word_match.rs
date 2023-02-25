@@ -1,7 +1,6 @@
 const IGNORED_WORDS: [&str; 3] = ["a", "of", "the"];
 
 pub struct Tokens<'a> {
-    tags: Vec<&'a str>,
     words: Vec<&'a str>,
 }
 
@@ -12,12 +11,12 @@ impl<'a> Tokens<'a> {
             None => s,
         };
         let tokens = tokens.split_whitespace();
-        let (tags, words) = tokens.partition(|&token| {
+        let (_tags, words) = tokens.partition(|&token| {
             token.starts_with('(') && token.ends_with(')')
                 || token.starts_with('[') && token.ends_with(']')
         });
 
-        Self { tags, words }
+        Self { words }
     }
 
     pub fn words_in_common_with(&self, other: &Tokens) -> usize {

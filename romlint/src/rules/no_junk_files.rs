@@ -1,5 +1,5 @@
+use crate::filemeta::FileMeta;
 use crate::linter::{Diagnostic, Rule};
-use dir_walker::FileMeta;
 
 const JUNK_FILES: [&str; 1] = ["txt"];
 

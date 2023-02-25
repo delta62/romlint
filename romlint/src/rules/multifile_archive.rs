@@ -1,9 +1,9 @@
+use crate::filemeta::FileMeta;
 use crate::linter::{Diagnostic, Rule};
-use dir_walker::FileMeta;
 
-pub struct MulitfileArchive;
+pub struct MultifileArchive;
 
-impl Rule for MulitfileArchive {
+impl Rule for MultifileArchive {
     fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
         // For files which are not archived, this rule is not applicable
         let len = file.archive().map(|arc| arc.len()).unwrap_or(1);

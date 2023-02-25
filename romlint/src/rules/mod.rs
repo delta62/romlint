@@ -7,7 +7,7 @@ mod uncompressed_file;
 mod unknown_rom;
 
 pub use file_permissions::FilePermissions;
-pub use multifile_archive::MulitfileArchive;
+pub use multifile_archive::MultifileArchive;
 pub use no_archives::NoArchives;
 pub use no_junk_files::NoJunkFiles;
 pub use obsolete_format::ObsoleteFormat;

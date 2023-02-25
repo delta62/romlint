@@ -6,20 +6,19 @@ const COMPRESSED_FORMATS: [&str; 1] = ["zip"];
 pub struct UncompressedFile;
 
 impl Rule for UncompressedFile {
-    fn check(&self, entry: &FileMeta) -> Option<Diagnostic> {
-        let path = entry.entry.path();
-        let ext = path.extension();
+    fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
+        let extension = file.extension().unwrap_or("");
 
         let is_compressed = COMPRESSED_FORMATS
             .iter()
-            .find(|&e| e == &ext.and_then(|e| e.to_str()).unwrap_or(""))
+            .find(|&e| e == &extension)
             .is_some();
 
         if is_compressed {
             None
         } else {
             Some(Diagnostic {
-                path: entry.entry.path(),
+                path: file.path().to_path_buf(),
                 message: "File is not compressed".to_string(),
                 hints: vec![],
             })

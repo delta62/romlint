@@ -17,12 +17,11 @@ impl Rule for UnknownRom {
     fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
         if self
             .datafile
-            .contains(file.entry.file_name().into_string().unwrap().as_str())
+            .contains(file.path().file_name().unwrap().to_str().unwrap())
         {
             None
         } else {
-            let path_str = file.entry.path();
-            let path_str = path_str.to_str().unwrap();
+            let path_str = file.path().to_str().unwrap();
             let file_tokens = Tokens::from_str(path_str);
             let similar_titles = self.datafile.similar_to(&file_tokens);
             let mut hints = similar_titles
@@ -36,7 +35,7 @@ impl Rule for UnknownRom {
 
             Some(Diagnostic {
                 message: "Can't find this ROM in the database".to_string(),
-                path: file.entry.path(),
+                path: file.path().to_path_buf(),
                 hints,
             })
         }

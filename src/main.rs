@@ -41,7 +41,6 @@ async fn main() {
         match next {
             Ok(Some(entry)) => {
                 let filename = entry
-                    .entry
                     .path()
                     .strip_prefix(args.cwd.as_str())
                     .unwrap()

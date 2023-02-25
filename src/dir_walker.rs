@@ -10,14 +10,27 @@ use tokio_stream::wrappers::ReadDirStream;
 type MetaResult = Result<FileMeta>;
 
 pub struct FileMeta {
-    pub meta: Metadata,
-    pub entry: DirEntry,
+    meta: Metadata,
+    path: PathBuf,
 }
 
 impl FileMeta {
     async fn from_dir_entry(entry: DirEntry) -> Result<Self> {
-        let meta = metadata(entry.path()).await?;
-        Ok(Self { meta, entry })
+        let path = entry.path();
+        let meta = metadata(&path).await?;
+        Ok(Self { meta, path })
+    }
+
+    pub fn path(&self) -> &Path {
+        self.path.as_path()
+    }
+
+    pub fn extension(&self) -> Option<&str> {
+        self.path.as_path().extension().and_then(|e| e.to_str())
+    }
+
+    pub fn metadata(&self) -> &Metadata {
+        &self.meta
     }
 }
 
@@ -38,7 +51,7 @@ async fn dir_or_singleton(file: FileMeta) -> Result<impl Stream<Item = MetaResul
     let is_dir = file.meta.is_dir();
 
     if is_dir {
-        let path = file.entry.path();
+        let path = file.path().to_path_buf();
         let rest = dir(path).await?;
         let stream = once(async { Ok(file) });
         Ok(stream.chain(rest).boxed())

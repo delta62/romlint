@@ -7,14 +7,17 @@ pub struct NoArchives;
 
 impl Rule for NoArchives {
     fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
-        let path = file.entry.path();
-        let ext = path.extension();
+        let extension = file
+            .path()
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
 
         ARCHIVE_EXTENSIONS
             .iter()
-            .find(|&e| e == &ext.and_then(|e| e.to_str()).unwrap_or(""))
+            .find(|&&e| e == extension)
             .map(|extension| Diagnostic {
-                path: file.entry.path(),
+                path: file.path().to_path_buf(),
                 message: format!("Unextracted archive ({})", extension),
                 hints: vec![],
             })

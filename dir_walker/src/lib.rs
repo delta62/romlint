@@ -18,6 +18,7 @@ impl FileMeta {
     async fn from_dir_entry(entry: DirEntry) -> Result<Self> {
         let path = entry.path();
         let meta = metadata(&path).await?;
+
         Ok(Self { meta, path })
     }
 
@@ -42,7 +43,7 @@ pub async fn walk(path: PathBuf) -> Result<impl Stream<Item = MetaResult>> {
         .try_flatten())
 }
 
-pub async fn dir<P: AsRef<Path>>(path: P) -> Result<impl Stream<Item = MetaResult>> {
+async fn dir<P: AsRef<Path>>(path: P) -> Result<impl Stream<Item = MetaResult>> {
     let entries = read_dir(path).await?;
     Ok(ReadDirStream::new(entries).and_then(FileMeta::from_dir_entry))
 }

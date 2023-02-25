@@ -2,13 +2,16 @@ use std::{error, fmt::Display, io};
 
 #[derive(Debug)]
 pub enum Error {
-    Deserialize(String),
+    Deserialize(Box<dyn error::Error>),
     Io(io::Error),
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Self::Deserialize(err) => write!(f, "{}", err),
+            Self::Io(err) => write!(f, "{}", err),
+        }
     }
 }
 

@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.1.6", features = ["derive"] }
+dir_walker = { path = "../dir_walker" }
 futures = "0.3.26"
 no_intro = { path = "../no_intro" }
 tokio = { version = "1.25.0", features = ["macros", "rt", "fs"] }
-tokio-stream = { version = "0.1.12", features = ["fs"] }
 zip = "0.6.4"

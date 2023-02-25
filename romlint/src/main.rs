@@ -1,7 +1,6 @@
 mod ansi;
 mod args;
 mod db;
-mod dir_walker;
 mod error;
 mod linter;
 mod rules;

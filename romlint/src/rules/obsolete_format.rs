@@ -1,5 +1,5 @@
-use crate::dir_walker::FileMeta;
 use crate::linter::{Diagnostic, Rule};
+use dir_walker::FileMeta;
 
 const OBSOLETE_FORMATS: [&str; 2] = ["n64", "v64"];
 

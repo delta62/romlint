@@ -1,5 +1,5 @@
-use crate::dir_walker::FileMeta;
 use crate::linter::{Diagnostic, Rule};
+use dir_walker::FileMeta;
 
 const COMPRESSED_FORMATS: [&str; 1] = ["zip"];
 

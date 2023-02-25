@@ -1,2 +1,2 @@
 [workspace]
-members = ["no_intro", "romlint"]
+members = ["dir_walker", "no_intro", "romlint"]

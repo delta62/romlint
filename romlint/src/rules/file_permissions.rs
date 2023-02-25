@@ -1,5 +1,5 @@
-use crate::dir_walker::FileMeta;
 use crate::linter::{Diagnostic, Rule};
+use dir_walker::FileMeta;
 use std::os::unix::prelude::PermissionsExt;
 
 pub struct FilePermissions;

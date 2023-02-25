@@ -1,7 +1,7 @@
 use crate::db::Database;
-use crate::dir_walker::FileMeta;
 use crate::linter::{Diagnostic, Rule};
 use crate::word_match::Tokens;
+use dir_walker::FileMeta;
 
 pub struct UnknownRom {
     database: Database,

@@ -10,7 +10,7 @@ impl Database {
     pub async fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
         let s = read_to_string(path).await.map_err(Error::Io)?;
         let datafile = no_intro::DataFile::from_file(s.as_str())
-            .map_err(|err| Error::Deserialize(err.to_string()))?;
+            .map_err(|err| Error::Deserialize(Box::new(err)))?;
         Ok(Self(datafile))
     }
 

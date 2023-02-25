@@ -2,6 +2,7 @@ mod ansi;
 mod args;
 mod db;
 mod dir_walker;
+mod error;
 mod linter;
 mod rules;
 mod ui;
@@ -9,6 +10,7 @@ mod word_match;
 
 use args::Args;
 use clap::Parser;
+use db::Database;
 use dir_walker::walk;
 use futures::TryStreamExt;
 use linter::Rule;
@@ -21,7 +23,7 @@ use ui::{Message, Report, Ui};
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let args = Args::parse();
-    let db = db::DataFile::from_file(args.db.as_str());
+    let db = Database::from_file(args.db.as_str()).await.unwrap();
     let path = PathBuf::from(args.cwd.as_str());
     let mut stream = Box::pin(walk(path).await.unwrap());
     let (tx, rx) = mpsc::channel();

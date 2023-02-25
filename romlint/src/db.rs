@@ -1,58 +1,26 @@
+use crate::error::Error;
 use crate::word_match::Tokens;
-use serde::Deserialize;
-use serde_xml_rs::from_str;
-use std::{fs::read_to_string, path::Path};
+use no_intro::DataFile;
+use std::path::Path;
+use tokio::fs::read_to_string;
 
-#[derive(Debug, Deserialize)]
-pub struct DataFile {
-    header: Header,
-    #[serde(rename = "game")]
-    games: Vec<Game>,
-}
+pub struct Database(DataFile);
 
-#[derive(Debug, Deserialize)]
-pub enum DataFileItem {
-    Game(Game),
-    Header(Header),
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Header {
-    id: usize,
-    name: String,
-    description: String,
-    version: String,
-    author: String,
-    homepage: String,
-    url: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Game {
-    name: String,
-    description: String,
-    rom: Rom,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Rom {
-    name: String,
-    size: usize,
-    crc: String,
-}
-
-impl DataFile {
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Self {
-        let file = read_to_string(path).unwrap();
-        from_str(file.as_str()).unwrap()
+impl Database {
+    pub async fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
+        let s = read_to_string(path).await.map_err(Error::Io)?;
+        let datafile = no_intro::DataFile::from_file(s.as_str())
+            .map_err(|err| Error::Deserialize(err.to_string()))?;
+        Ok(Self(datafile))
     }
 
     pub fn contains(&self, file: &str) -> bool {
-        self.games.iter().any(|game| game.name.as_str() == file)
+        self.0.games.iter().any(|game| game.name.as_str() == file)
     }
 
     pub fn similar_to<'s, 'a: 's>(&'s self, tokens: &'a Tokens<'a>) -> Vec<&'s str> {
         let mut similarities = self
+            .0
             .games
             .iter()
             .filter_map(|game| {

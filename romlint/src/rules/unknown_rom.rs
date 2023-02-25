@@ -1,29 +1,29 @@
-use crate::db::DataFile;
+use crate::db::Database;
 use crate::dir_walker::FileMeta;
 use crate::linter::{Diagnostic, Rule};
 use crate::word_match::Tokens;
 
 pub struct UnknownRom {
-    datafile: DataFile,
+    database: Database,
 }
 
 impl UnknownRom {
-    pub fn new(datafile: DataFile) -> Self {
-        Self { datafile }
+    pub fn new(database: Database) -> Self {
+        Self { database }
     }
 }
 
 impl Rule for UnknownRom {
     fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
         if self
-            .datafile
+            .database
             .contains(file.path().file_name().unwrap().to_str().unwrap())
         {
             None
         } else {
             let path_str = file.path().to_str().unwrap();
             let file_tokens = Tokens::from_str(path_str);
-            let similar_titles = self.datafile.similar_to(&file_tokens);
+            let similar_titles = self.database.similar_to(&file_tokens);
             let mut hints = similar_titles
                 .iter()
                 .map(|title| format!("* {}", title))

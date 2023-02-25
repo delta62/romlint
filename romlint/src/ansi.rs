@@ -11,11 +11,6 @@ pub fn green(s: impl Display) {
     io::stdout().lock().flush().unwrap();
 }
 
-pub fn blue(s: impl Display) {
-    print!("\x1b[34m{}\x1b[0m", s);
-    io::stdout().lock().flush().unwrap();
-}
-
 pub fn move_to_line_start() {
     print!("\x1b[1G");
     io::stdout().lock().flush().unwrap_or_default();

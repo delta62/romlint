@@ -1,7 +1,7 @@
 use dir_walker::FileMeta as DirMeta;
-use std::fs::Metadata;
+use std::fs::{File, Metadata};
 use std::{
-    io::Error,
+    io::{BufReader, Result},
     path::{Path, PathBuf},
 };
 use tokio::task::spawn_blocking;
@@ -15,6 +15,10 @@ impl ArchiveInfo {
     pub fn len(&self) -> usize {
         self.file_names.len()
     }
+
+    pub fn file_names(&self) -> impl Iterator<Item = &str> {
+        self.file_names.iter().map(|s| s.as_str())
+    }
 }
 
 pub struct FileMeta {
@@ -24,21 +28,22 @@ pub struct FileMeta {
 }
 
 impl FileMeta {
-    pub async fn from_dir_walker(file: DirMeta) -> Result<Self, Error> {
-        let archive = if let Some("zip") = file.path.extension().and_then(|os| os.to_str()) {
+    pub async fn from_dir_walker(file: DirMeta) -> Result<Self> {
+        let extension = file.path.extension().and_then(|os| os.to_str());
+        let mut archive = None;
+
+        if let Some("zip") = extension {
             let path = file.path.clone();
-            spawn_blocking(|| {
-                let handle = std::fs::File::open(path)?;
-                let reader = std::io::BufReader::new(handle);
-                let arc = ZipArchive::new(reader).unwrap();
+            let info = spawn_blocking(|| -> Result<Option<ArchiveInfo>> {
+                let file = File::open(path)?;
+                let reader = BufReader::new(file);
+                let zip = ZipArchive::new(reader).unwrap();
+                let file_names = zip.file_names().map(|s| s.to_owned()).collect();
 
-                let file_names = arc.file_names().map(|s| s.to_owned()).collect();
-
-                Ok::<Option<ArchiveInfo>, std::io::Error>(Some(ArchiveInfo { file_names }))
+                Ok(Some(ArchiveInfo { file_names }))
             })
-            .await??
-        } else {
-            None
+            .await??;
+            archive = info;
         };
 
         Ok(Self {
@@ -46,6 +51,10 @@ impl FileMeta {
             meta: file.meta,
             path: file.path,
         })
+    }
+
+    pub fn basename(&self) -> Option<&str> {
+        self.path.file_stem().and_then(|s| s.to_str())
     }
 
     pub fn path(&self) -> &Path {

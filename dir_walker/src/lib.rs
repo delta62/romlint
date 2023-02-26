@@ -15,6 +15,13 @@ pub struct FileMeta {
 }
 
 impl FileMeta {
+    pub async fn from_path<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let meta = metadata(path.as_ref()).await?;
+        let path = path.as_ref().to_path_buf();
+
+        Ok(Self { meta, path })
+    }
+
     async fn from_dir_entry(entry: DirEntry) -> Result<Self> {
         let path = entry.path();
         let meta = metadata(&path).await?;

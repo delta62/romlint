@@ -12,4 +12,4 @@ pub trait Rule {
     fn check(&self, file: &FileMeta) -> Option<Diagnostic>;
 }
 
-pub type Rules = Vec<Box<dyn Rule>>;
+pub type Rules = Vec<Box<dyn Rule + Sync + Send>>;

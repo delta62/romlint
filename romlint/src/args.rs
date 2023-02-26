@@ -3,10 +3,9 @@ use clap::{Parser, ValueEnum};
 #[derive(Clone, Debug, ValueEnum)]
 pub enum Command {
     Scan,
-    Watch,
 }
 
-#[derive(Debug, Parser)]
+#[derive(Clone, Debug, Parser)]
 pub struct Args {
     #[clap(short, long)]
     pub cwd: String,

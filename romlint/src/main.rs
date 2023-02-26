@@ -11,7 +11,7 @@ mod word_match;
 
 use args::{Args, Command};
 use clap::Parser;
-use commands::{scan, watch};
+use commands::scan;
 use db::Database;
 use linter::Rules;
 use rules::{
@@ -25,7 +25,7 @@ use ui::{Message, Ui};
 async fn main() {
     let args = Args::parse();
     let db = Database::from_file(args.db.as_str()).await.unwrap();
-    let (mut tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::channel();
     let ui_thread = spawn(move || Ui::new(rx).run());
 
     let rules: Rules = vec![
@@ -39,8 +39,7 @@ async fn main() {
     ];
 
     match args.command {
-        Command::Scan => scan(&args, &rules, &mut tx).await,
-        Command::Watch => watch(&args, &rules, &mut tx).await,
+        Command::Scan => scan(&args, &rules, tx.clone()).await.unwrap(),
     }
 
     tx.send(Message::Finished).unwrap();

@@ -1,5 +1,5 @@
+mod check;
 mod scan;
-mod watch;
 
+pub use check::check;
 pub use scan::scan;
-pub use watch::watch;

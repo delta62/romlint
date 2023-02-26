@@ -1,27 +1,17 @@
 use std::fmt::Display;
-use std::io::{self, Write};
+use std::io::{self, Result, Write};
 
-pub fn red(s: impl Display) {
-    print!("\x1b[31m{}\x1b[0m", s);
-    io::stdout().lock().flush().unwrap();
-}
-
-pub fn green(s: impl Display) {
-    print!("\x1b[32m{}\x1b[0m", s);
-    io::stdout().lock().flush().unwrap();
-}
-
-pub fn move_to_line_start() {
+pub fn move_to_line_start() -> Result<()> {
     print!("\x1b[1G");
-    io::stdout().lock().flush().unwrap_or_default();
+    io::stdout().lock().flush()
 }
 
-pub fn print_status<D: Display>(s: D) {
+pub fn print_status<D: Display>(s: D) -> Result<()> {
     print!("\x1b[1G{}", s);
-    io::stdout().lock().flush().unwrap_or_default();
+    io::stdout().lock().flush()
 }
 
-pub fn clear_line() {
+pub fn clear_line() -> Result<()> {
     print!("\x1b[2K");
-    io::stdout().lock().flush().unwrap_or_default();
+    io::stdout().lock().flush()
 }

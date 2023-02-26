@@ -1,5 +1,7 @@
 use snafu::prelude::*;
-use std::{io, path::PathBuf};
+use std::{io, path::PathBuf, sync::mpsc::SendError};
+
+use crate::ui::Message;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub), context(suffix(Err)))]
@@ -15,6 +17,9 @@ pub enum Error {
 
     #[snafu(display("error accessing {}", path.display()))]
     Io { path: PathBuf, source: io::Error },
+
+    #[snafu(display("attempted to send over a broken pipe"))]
+    BrokenPipe { source: SendError<Message> },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

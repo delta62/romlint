@@ -27,7 +27,7 @@ impl Args {
         self.cwd
             .as_ref()
             .map(|c| Path::new(c.as_str()).to_path_buf())
-            .ok_or_else(|| std::env::current_dir().ok())
-            .unwrap()
+            .or_else(|| std::env::current_dir().ok())
+            .expect("Unable to access current working directory")
     }
 }

@@ -13,12 +13,13 @@ mod word_match;
 use args::Args;
 use clap::Parser;
 use commands::scan;
-use error::Result;
+use error::{BrokenPipeErr, Result};
 use linter::Rules;
 use rules::{
     FilePermissions, MultifileArchive, NoArchives, NoJunkFiles, ObsoleteFormat, UncompressedFile,
     UnknownRom,
 };
+use snafu::prelude::*;
 use std::{sync::mpsc, thread::spawn};
 use ui::{Message, Ui};
 
@@ -49,8 +50,8 @@ async fn run(args: Args) -> Result<()> {
 
     scan(&args, &config, &rules, tx.clone()).await?;
 
-    tx.send(Message::Finished).unwrap();
-    ui_thread.join().unwrap();
+    tx.send(Message::Finished).context(BrokenPipeErr {})?;
+    ui_thread.join().unwrap()?;
 
     Ok(())
 }

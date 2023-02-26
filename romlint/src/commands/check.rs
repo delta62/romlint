@@ -1,9 +1,10 @@
 use crate::linter::Rules;
 use crate::{
-    error::Result,
+    error::{BrokenPipeErr, Result},
     filemeta::FileMeta,
     ui::{Message, Report},
 };
+use snafu::prelude::*;
 use std::path::Path;
 use std::sync::mpsc::Sender;
 
@@ -17,10 +18,12 @@ pub fn check<P: AsRef<Path>>(
         .path()
         .strip_prefix(cwd)
         .unwrap()
-        .to_string_lossy()
-        .to_string();
+        .to_str()
+        .unwrap()
+        .to_owned();
 
-    tx.send(Message::SetStatus(path.clone())).unwrap();
+    tx.send(Message::SetStatus(path.clone()))
+        .context(BrokenPipeErr {})?;
 
     let diagnostics = rules
         .iter()
@@ -28,7 +31,7 @@ pub fn check<P: AsRef<Path>>(
         .collect::<Vec<_>>();
     let report = Report { diagnostics, path };
 
-    tx.send(Message::Report(report)).unwrap();
+    tx.send(Message::Report(report)).context(BrokenPipeErr {})?;
 
     Ok(())
 }

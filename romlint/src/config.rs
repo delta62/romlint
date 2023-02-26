@@ -1,20 +1,28 @@
-use crate::error::{Error, Result};
+use crate::error::{ConfigReadErr, IoErr, Result};
 use serde::Deserialize;
+use snafu::prelude::*;
 use std::{collections::HashMap, path::Path};
 use tokio::fs::read_to_string;
 use toml::from_str;
 
 pub async fn from_path<P: AsRef<Path>>(path: P) -> Result<Config> {
-    let s = read_to_string(path).await.map_err(Error::Io)?;
-    from_str(s.as_str()).map_err(|err| Error::Deserialize(err.to_string()))
+    let s = read_to_string(path.as_ref()).await.context(IoErr {
+        path: path.as_ref(),
+    })?;
+    from_str(s.as_str()).context(ConfigReadErr {})
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    archive_formats: Vec<String>,
-    db_dir: String,
+    global: GlobalConfig,
     #[serde(rename = "system")]
     systems: HashMap<String, SystemConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GlobalConfig {
+    archive_formats: Vec<String>,
+    db_dir: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -26,14 +34,19 @@ pub struct SystemConfig {
 impl Config {
     pub fn resolve(&self, system: &str) -> Option<ResolvedConfig<'_>> {
         self.systems.get(system).map(|sys| ResolvedConfig {
-            archive_formats: self.archive_formats.iter().map(|s| s.as_str()).collect(),
+            archive_formats: self
+                .global
+                .archive_formats
+                .iter()
+                .map(|s| s.as_str())
+                .collect(),
             archive_format: sys.archive_format.as_str(),
             obsolete_formats: sys.obsolete_formats.iter().map(|s| s.as_str()).collect(),
         })
     }
 
     pub fn db_dir(&self) -> &str {
-        self.db_dir.as_str()
+        self.global.db_dir.as_str()
     }
 }
 

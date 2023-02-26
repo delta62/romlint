@@ -1,20 +1,20 @@
-use std::{error, fmt::Display, io};
+use snafu::prelude::*;
+use std::{io, path::PathBuf};
 
-#[derive(Debug)]
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub), context(suffix(Err)))]
 pub enum Error {
-    Deserialize(String),
-    Io(io::Error),
-}
+    #[snafu(display("error reading ROM database"))]
+    DatabaseRead { source: no_intro::Error },
 
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Deserialize(err) => write!(f, "{}", err),
-            Self::Io(err) => write!(f, "{}", err),
-        }
-    }
-}
+    #[snafu(display("unable to determine the system name of {}", path.display()))]
+    DatabaseName { path: PathBuf },
 
-impl error::Error for Error {}
+    #[snafu(display("error reading config"))]
+    ConfigRead { source: toml::de::Error },
+
+    #[snafu(display("error accessing {}", path.display()))]
+    Io { path: PathBuf, source: io::Error },
+}
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -1,7 +1,8 @@
-use crate::error::Error;
+use crate::error::{DatabaseNameErr, DatabaseReadErr, IoErr, Result};
 use crate::word_match::Tokens;
 use crate::{args::Args, config::Config};
 use no_intro::DataFile;
+use snafu::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
 use tokio::fs::{read_dir, read_to_string};
@@ -9,10 +10,11 @@ use tokio::fs::{read_dir, read_to_string};
 pub struct Database(DataFile);
 
 impl Database {
-    pub async fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, Error> {
-        let s = read_to_string(path).await.map_err(Error::Io)?;
-        let datafile = no_intro::DataFile::from_file(s.as_str())
-            .map_err(|err| Error::Deserialize(err.to_string()))?;
+    pub async fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let s = read_to_string(path.as_ref()).await.context(IoErr {
+            path: path.as_ref(),
+        })?;
+        let datafile = no_intro::DataFile::from_file(s.as_str()).context(DatabaseReadErr {})?;
         Ok(Self(datafile))
     }
 
@@ -47,27 +49,31 @@ impl Database {
     }
 }
 
-pub async fn load_all(args: &Args, config: &Config) -> Result<HashMap<String, Database>, Error> {
-    let db_dir = args.resolve_path(config.db_dir());
-    println!("{:?}", db_dir);
-    let mut readdir = read_dir(db_dir).await.map_err(Error::Io)?;
+pub async fn load_all(args: &Args, config: &Config) -> Result<HashMap<String, Database>> {
+    let path = args.resolve_path(config.db_dir());
+    let mut readdir = read_dir(path.as_path()).await.context(IoErr {
+        path: path.as_path(),
+    })?;
     let mut databases = HashMap::new();
-    println!("aaa");
 
     loop {
-        let entry = readdir.next_entry().await.map_err(Error::Io)?;
+        let entry = readdir.next_entry().await.context(IoErr {
+            path: path.as_path(),
+        })?;
+
         match entry {
             Some(entry) => {
                 let path = entry.path();
                 let system = path
+                    .as_path()
                     .file_stem()
                     .and_then(|f| f.to_str())
                     .map(|s| s.to_owned())
-                    .expect("Unable to determine system for database file");
+                    .context(DatabaseNameErr {
+                        path: path.as_path(),
+                    })?;
 
-                let db = Database::from_file(path)
-                    .await
-                    .map_err(|err| Error::Deserialize(err.to_string()))?;
+                let db = Database::from_file(path).await?;
                 databases.insert(system, db);
             }
             None => break,

@@ -2,7 +2,7 @@ use std::{error, fmt::Display, io};
 
 #[derive(Debug)]
 pub enum Error {
-    Deserialize(Box<dyn error::Error>),
+    Deserialize(String),
     Io(io::Error),
 }
 

@@ -27,6 +27,7 @@ pub struct FileMeta<'a> {
     meta: Metadata,
     path: PathBuf,
     archive: Option<ArchiveInfo>,
+    system: String,
 }
 
 impl<'a> FileMeta<'a> {
@@ -58,6 +59,7 @@ impl<'a> FileMeta<'a> {
             config,
             meta: file.meta,
             path: file.path,
+            system: system.to_owned(),
         })
     }
 
@@ -83,5 +85,9 @@ impl<'a> FileMeta<'a> {
 
     pub fn archive(&self) -> Option<&ArchiveInfo> {
         self.archive.as_ref()
+    }
+
+    pub fn system(&self) -> &str {
+        self.system.as_str()
     }
 }

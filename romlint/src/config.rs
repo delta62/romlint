@@ -6,7 +6,7 @@ use toml::from_str;
 
 pub async fn from_path<P: AsRef<Path>>(path: P) -> Result<Config> {
     let s = read_to_string(path).await.map_err(Error::Io)?;
-    from_str(s.as_str()).map_err(|err| Error::Deserialize(Box::new(err)))
+    from_str(s.as_str()).map_err(|err| Error::Deserialize(err.to_string()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,6 +30,10 @@ impl Config {
             archive_format: sys.archive_format.as_str(),
             obsolete_formats: sys.obsolete_formats.iter().map(|s| s.as_str()).collect(),
         })
+    }
+
+    pub fn db_dir(&self) -> &str {
+        self.db_dir.as_str()
     }
 }
 

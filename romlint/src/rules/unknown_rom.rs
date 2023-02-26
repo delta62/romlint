@@ -2,28 +2,29 @@ use crate::db::Database;
 use crate::filemeta::FileMeta;
 use crate::linter::{Diagnostic, Rule};
 use crate::word_match::Tokens;
+use std::collections::HashMap;
 
 pub struct UnknownRom {
-    database: Database,
+    databases: HashMap<String, Database>,
 }
 
 impl UnknownRom {
-    pub fn new(database: Database) -> Self {
-        Self { database }
+    pub fn new(databases: HashMap<String, Database>) -> Self {
+        Self { databases }
     }
 }
 
 impl Rule for UnknownRom {
     fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
-        if self
-            .database
-            .contains(file.path().file_name().unwrap().to_str().unwrap())
-        {
+        let system = file.system();
+        let db = self.databases.get(system).unwrap();
+
+        if db.contains(file.path().file_name().unwrap().to_str().unwrap()) {
             None
         } else {
             let path_str = file.path().to_str().unwrap();
             let file_tokens = Tokens::from_str(path_str);
-            let similar_titles = self.database.similar_to(&file_tokens);
+            let similar_titles = db.similar_to(&file_tokens);
             let mut hints = similar_titles
                 .iter()
                 .map(|title| format!("* {}", title))

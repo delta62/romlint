@@ -9,6 +9,7 @@ dir_walker = { path = "../dir_walker" }
 futures = "0.3.26"
 no_intro = { path = "../no_intro" }
 serde = { version = "1.0.152", features = ["derive"] }
+snafu = "0.7.4"
 tokio = { version = "1.25.0", features = ["macros", "rt", "fs", "io-util"] }
 toml = "0.7.2"
 zip = "0.6.4"

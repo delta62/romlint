@@ -13,7 +13,7 @@ mod word_match;
 use args::Args;
 use clap::Parser;
 use commands::scan;
-use db::Database;
+use error::Result;
 use linter::Rules;
 use rules::{
     FilePermissions, MultifileArchive, NoArchives, NoJunkFiles, ObsoleteFormat, UncompressedFile,
@@ -25,23 +25,32 @@ use ui::{Message, Ui};
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let args = Args::parse();
-    let config = config::from_path("./config.toml").await.unwrap();
-    let db = Database::from_file(args.db.as_str()).await.unwrap();
+    if let Err(err) = run(args).await {
+        eprintln!("{}", err);
+    }
+}
+
+async fn run(args: Args) -> Result<()> {
+    let config_path = args.resolve_path(args.config_path.as_str());
+    let config = config::from_path(config_path).await?;
     let (tx, rx) = mpsc::channel();
     let ui_thread = spawn(move || Ui::new(rx).run());
+    let databases = db::load_all(&args, &config).await?;
 
     let rules: Rules = vec![
         Box::new(NoJunkFiles),
         Box::new(NoArchives),
         Box::new(FilePermissions),
         Box::new(ObsoleteFormat),
-        Box::new(UnknownRom::new(db)),
+        Box::new(UnknownRom::new(databases)),
         Box::new(UncompressedFile),
         Box::new(MultifileArchive),
     ];
 
-    scan(&args, &config, &rules, tx.clone()).await.unwrap();
+    scan(&args, &config, &rules, tx.clone()).await?;
 
     tx.send(Message::Finished).unwrap();
     ui_thread.join().unwrap();
+
+    Ok(())
 }

@@ -1,9 +1,9 @@
 use crate::linter::Rules;
 use crate::{
+    error::Result,
     filemeta::FileMeta,
     ui::{Message, Report},
 };
-use std::error::Error;
 use std::path::Path;
 use std::sync::mpsc::Sender;
 
@@ -12,7 +12,7 @@ pub fn check<P: AsRef<Path>>(
     file: &FileMeta,
     rules: &Rules,
     tx: &Sender<Message>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<()> {
     let path = file
         .path()
         .strip_prefix(cwd)
@@ -20,7 +20,7 @@ pub fn check<P: AsRef<Path>>(
         .to_string_lossy()
         .to_string();
 
-    tx.send(Message::SetStatus(path.clone()))?;
+    tx.send(Message::SetStatus(path.clone())).unwrap();
 
     let diagnostics = rules
         .iter()
@@ -28,7 +28,7 @@ pub fn check<P: AsRef<Path>>(
         .collect::<Vec<_>>();
     let report = Report { diagnostics, path };
 
-    tx.send(Message::Report(report))?;
+    tx.send(Message::Report(report)).unwrap();
 
     Ok(())
 }

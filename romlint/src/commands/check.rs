@@ -22,7 +22,10 @@ pub fn check<P: AsRef<Path>>(
 
     tx.send(Message::SetStatus(path.clone()))?;
 
-    let diagnostics: Vec<_> = rules.iter().filter_map(|rule| rule.check(file)).collect();
+    let diagnostics = rules
+        .iter()
+        .filter_map(|rule| rule.check(file))
+        .collect::<Vec<_>>();
     let report = Report { diagnostics, path };
 
     tx.send(Message::Report(report))?;

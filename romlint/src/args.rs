@@ -1,9 +1,4 @@
-use clap::{Parser, ValueEnum};
-
-#[derive(Clone, Debug, ValueEnum)]
-pub enum Command {
-    Scan,
-}
+use clap::Parser;
 
 #[derive(Clone, Debug, Parser)]
 pub struct Args {
@@ -13,5 +8,6 @@ pub struct Args {
     #[clap(short, long)]
     pub db: String,
 
-    pub command: Command,
+    #[clap(short, long)]
+    pub system: String,
 }

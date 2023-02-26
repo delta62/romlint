@@ -1,3 +1,4 @@
+use crate::config::{Config, ResolvedConfig};
 use dir_walker::FileMeta as DirMeta;
 use std::fs::{File, Metadata};
 use std::{
@@ -21,16 +22,22 @@ impl ArchiveInfo {
     }
 }
 
-pub struct FileMeta {
+pub struct FileMeta<'a> {
+    config: ResolvedConfig<'a>,
     meta: Metadata,
     path: PathBuf,
     archive: Option<ArchiveInfo>,
 }
 
-impl FileMeta {
-    pub async fn from_dir_walker(file: DirMeta) -> Result<Self> {
+impl<'a> FileMeta<'a> {
+    pub async fn from_dir_walker<'b: 'a>(
+        file: DirMeta,
+        system: &str,
+        config: &'b Config,
+    ) -> Result<FileMeta<'a>> {
         let extension = file.path.extension().and_then(|os| os.to_str());
         let mut archive = None;
+        let config = config.resolve(system).unwrap();
 
         if let Some("zip") = extension {
             let path = file.path.clone();
@@ -48,9 +55,14 @@ impl FileMeta {
 
         Ok(Self {
             archive,
+            config,
             meta: file.meta,
             path: file.path,
         })
+    }
+
+    pub fn config(&self) -> &ResolvedConfig {
+        &self.config
     }
 
     pub fn basename(&self) -> Option<&str> {

@@ -1,14 +1,13 @@
 use crate::filemeta::FileMeta;
 use crate::linter::{Diagnostic, Rule};
 
-const COMPRESSED_FORMATS: [&str; 1] = ["zip"];
-
 pub struct UncompressedFile;
 
 impl Rule for UncompressedFile {
     fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
         let extension = file.extension().unwrap_or("");
-        let is_compressed = COMPRESSED_FORMATS.iter().any(|&e| e == extension);
+        let archive_extension = &file.config().archive_format;
+        let is_compressed = archive_extension == &extension;
 
         if is_compressed {
             None

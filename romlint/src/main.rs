@@ -1,6 +1,7 @@
 mod ansi;
 mod args;
 mod commands;
+mod config;
 mod db;
 mod error;
 mod filemeta;
@@ -9,7 +10,7 @@ mod rules;
 mod ui;
 mod word_match;
 
-use args::{Args, Command};
+use args::Args;
 use clap::Parser;
 use commands::scan;
 use db::Database;
@@ -24,6 +25,7 @@ use ui::{Message, Ui};
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let args = Args::parse();
+    let config = config::from_path("./config.toml").await.unwrap();
     let db = Database::from_file(args.db.as_str()).await.unwrap();
     let (tx, rx) = mpsc::channel();
     let ui_thread = spawn(move || Ui::new(rx).run());
@@ -38,9 +40,7 @@ async fn main() {
         Box::new(MultifileArchive),
     ];
 
-    match args.command {
-        Command::Scan => scan(&args, &rules, tx.clone()).await.unwrap(),
-    }
+    scan(&args, &config, &rules, tx.clone()).await.unwrap();
 
     tx.send(Message::Finished).unwrap();
     ui_thread.join().unwrap();

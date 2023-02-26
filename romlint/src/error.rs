@@ -16,3 +16,5 @@ impl Display for Error {
 }
 
 impl error::Error for Error {}
+
+pub type Result<T> = std::result::Result<T, Error>;

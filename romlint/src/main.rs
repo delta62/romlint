@@ -16,7 +16,7 @@ use commands::scan;
 use error::{BrokenPipeErr, Result};
 use linter::Rules;
 use rules::{
-    FilePermissions, MultifileArchive, NoArchives, NoJunkFiles, ObsoleteFormat, UncompressedFile,
+    FilePermissions, MultifileArchive, NoArchives, NoLooseFiles, ObsoleteFormat, UncompressedFile,
     UnknownRom,
 };
 use snafu::prelude::*;
@@ -41,7 +41,7 @@ async fn run(args: Args) -> Result<()> {
     let ui_thread = spawn(move || Ui::new(rx).run());
 
     let rules: Rules = vec![
-        Box::new(NoJunkFiles),
+        Box::new(NoLooseFiles),
         Box::new(NoArchives),
         Box::new(FilePermissions),
         Box::new(ObsoleteFormat),

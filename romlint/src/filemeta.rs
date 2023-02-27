@@ -106,4 +106,8 @@ impl<'a> FileMeta<'a> {
             system_from_path(&self.path)
         }
     }
+
+    pub fn depth(&self) -> usize {
+        self.depth
+    }
 }

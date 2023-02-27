@@ -25,10 +25,20 @@ pub fn check<P: AsRef<Path>>(
     tx.send(Message::SetStatus(path.clone()))
         .context(BrokenPipeErr {})?;
 
-    let diagnostics = rules
-        .iter()
-        .filter_map(|rule| rule.check(file).err())
-        .collect::<Vec<_>>();
+    let mut diagnostics = Vec::new();
+
+    for rule in rules {
+        if let Err(diag) = rule.check(file) {
+            let terminal = diag.terminal;
+
+            diagnostics.push(diag);
+
+            if terminal {
+                break;
+            }
+        }
+    }
+
     let report = Report { diagnostics, path };
 
     tx.send(Message::Report(report)).context(BrokenPipeErr {})?;

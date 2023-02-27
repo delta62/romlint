@@ -28,7 +28,8 @@ pub struct GlobalConfig {
 #[derive(Debug, Deserialize)]
 pub struct SystemConfig {
     archive_format: String,
-    obsolete_formats: Vec<String>,
+    obsolete_formats: Option<Vec<String>>,
+    raw_format: String,
 }
 
 impl Config {
@@ -40,8 +41,12 @@ impl Config {
                 .iter()
                 .map(|s| s.as_str())
                 .collect(),
+            raw_format: sys.raw_format.as_str(),
             archive_format: sys.archive_format.as_str(),
-            obsolete_formats: sys.obsolete_formats.iter().map(|s| s.as_str()).collect(),
+            obsolete_formats: sys
+                .obsolete_formats
+                .as_ref()
+                .map(|fmts| fmts.iter().map(|s| s.as_str()).collect()),
         })
     }
 
@@ -53,5 +58,6 @@ impl Config {
 pub struct ResolvedConfig<'a> {
     pub archive_formats: Vec<&'a str>,
     pub archive_format: &'a str,
-    pub obsolete_formats: Vec<&'a str>,
+    pub obsolete_formats: Option<Vec<&'a str>>,
+    pub raw_format: &'a str,
 }

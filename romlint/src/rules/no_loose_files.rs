@@ -11,11 +11,16 @@ impl Rule for NoLooseFiles {
             .config()
             .ok_or_else(|| Diagnostic::unknown_system(file))?;
 
+        let default_obs = vec![];
+        let obsolete_formats = config.obsolete_formats.as_ref().unwrap_or(&default_obs);
+
+        // Don't double-report things that other rules will report
         let mut allowed_extensions = config
             .archive_formats
             .iter()
-            .chain(config.obsolete_formats.iter())
-            .chain(once(&config.archive_format));
+            .chain(obsolete_formats.iter())
+            .chain(once(&config.archive_format))
+            .chain(once(&config.raw_format));
 
         let is_loose_file = allowed_extensions.any(|e| e == &extension);
 

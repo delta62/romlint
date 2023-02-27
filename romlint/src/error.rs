@@ -6,13 +6,16 @@ use crate::ui::Message;
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub), context(suffix(Err)))]
 pub enum Error {
-    #[snafu(display("error reading ROM database"))]
-    DatabaseRead { source: no_intro::Error },
+    #[snafu(display("error reading {} database: {source}", path.display()))]
+    DatabaseRead {
+        path: PathBuf,
+        source: no_intro::Error,
+    },
 
     #[snafu(display("unable to determine the system name of {}", path.display()))]
     DatabaseName { path: PathBuf },
 
-    #[snafu(display("error reading config"))]
+    #[snafu(display("error reading config: {source}"))]
     ConfigRead { source: toml::de::Error },
 
     #[snafu(display("error accessing {}", path.display()))]

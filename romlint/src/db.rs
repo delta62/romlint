@@ -13,7 +13,9 @@ impl Database {
         let s = read_to_string(path.as_ref()).await.context(IoErr {
             path: path.as_ref(),
         })?;
-        let datafile = no_intro::DataFile::from_file(s.as_str()).context(DatabaseReadErr {})?;
+        let datafile = no_intro::DataFile::from_file(s.as_str()).context(DatabaseReadErr {
+            path: path.as_ref(),
+        })?;
         Ok(Self(datafile))
     }
 

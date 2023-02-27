@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 serde = { version = "1.0.152", features = ["derive"] }
 serde-xml-rs = "0.6.0"
+serde_path_to_error = "0.1.9"

@@ -1,18 +1,17 @@
-use std::fmt::Display;
-
 use serde::Deserialize;
-use serde_xml_rs::from_str;
+use std::fmt::Display;
 
 // Derived from https://datomatic.no-intro.org/stuff/schema_nointro_datfile_v2.xsd
 
 #[derive(Debug)]
-pub enum Error {
-    Deserialize(String),
+pub struct Error {
+    message: String,
+    path: String,
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{} - {}", self.message, self.path)
     }
 }
 
@@ -69,6 +68,11 @@ pub struct Rom {
 
 impl DataFile {
     pub fn from_file(s: &str) -> Result<Self, Error> {
-        from_str(s).map_err(|err| Error::Deserialize(err.to_string()))
+        let bytes = s.as_bytes();
+        let mut de = serde_xml_rs::Deserializer::new_from_reader(bytes);
+        serde_path_to_error::deserialize(&mut de).map_err(|err| Error {
+            path: err.path().to_string(),
+            message: err.to_string(),
+        })
     }
 }

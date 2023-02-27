@@ -11,7 +11,10 @@ impl Rule for ObsoleteFormat {
 
         let obsolete_formats = &config.obsolete_formats;
         let extension = file.extension().unwrap_or("");
-        let found_format = obsolete_formats.iter().any(|e| e == &extension);
+        let found_format = obsolete_formats
+            .as_ref()
+            .and_then(|fmts| fmts.iter().find(|&&e| e == extension))
+            .is_some();
 
         if found_format {
             Err(Diagnostic::from_file(

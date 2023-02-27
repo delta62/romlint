@@ -65,7 +65,7 @@ fn print_report(report: &Report) {
     if report.ok() {
         println!(" {}", Green.paint(report.path.as_str()));
     } else {
-        println!("❌{}", Red.paint(report.path.as_str()));
+        println!("{}", Red.paint(format!("❌ {}", report.path.as_str())));
         for (i, diag) in report.diagnostics.iter().enumerate() {
             let last = i == report.diagnostics.len() - 1;
 

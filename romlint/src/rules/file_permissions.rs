@@ -11,22 +11,20 @@ impl Rule for FilePermissions {
 
         match (is_dir, mode) {
             (true, 0o755) | (false, 0o644) => None,
-            (true, _) => Some(Diagnostic {
-                message: format!(
+            (true, _) => Some(Diagnostic::from_file(
+                file,
+                format!(
                     "Directory has incorrect permissions; should be 755 (is {:o})",
                     mode
                 ),
-                path: file.path().to_path_buf(),
-                hints: vec![],
-            }),
-            (false, _) => Some(Diagnostic {
-                message: format!(
+            )),
+            (false, _) => Some(Diagnostic::from_file(
+                file,
+                format!(
                     "File has incorrect permissions; should be 644 (is {:o})",
                     mode
                 ),
-                path: file.path().to_path_buf(),
-                hints: vec![],
-            }),
+            )),
         }
     }
 }

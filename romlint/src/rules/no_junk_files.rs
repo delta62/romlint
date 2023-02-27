@@ -12,10 +12,8 @@ impl Rule for NoJunkFiles {
         JUNK_FILES
             .iter()
             .find(|&e| e == &extension)
-            .map(|extension| Diagnostic {
-                path: file.path().to_path_buf(),
-                message: format!("Junk file extension (.{})", extension),
-                hints: vec![],
+            .map(|extension| {
+                Diagnostic::from_file(file, format!("Junk file extension (.{})", extension))
             })
     }
 }

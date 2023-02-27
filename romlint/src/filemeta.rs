@@ -23,14 +23,15 @@ impl ArchiveInfo {
 }
 
 pub struct FileMeta<'a> {
-    config: ResolvedConfig<'a>,
+    archive: Option<ArchiveInfo>,
+    config: Option<ResolvedConfig<'a>>,
     depth: usize,
+    forced_system: Option<&'a str>,
     meta: Metadata,
     path: PathBuf,
-    archive: Option<ArchiveInfo>,
 }
 
-fn system_from_path(path: &PathBuf) -> Option<&str> {
+fn system_from_path(path: &Path) -> Option<&str> {
     path.parent()
         .and_then(|p| p.file_name())
         .and_then(|n| n.to_str())
@@ -45,8 +46,6 @@ impl<'a> FileMeta<'a> {
         let config = system
             .or_else(|| system_from_path(&file.path))
             .and_then(|sys| config.resolve(sys));
-
-        let config = config.unwrap();
         let extension = file.path.extension().and_then(|os| os.to_str());
         let mut archive = None;
 
@@ -66,15 +65,16 @@ impl<'a> FileMeta<'a> {
 
         Ok(Self {
             archive,
-            depth: file.depth,
             config,
+            depth: file.depth,
+            forced_system: system,
             meta: file.meta,
             path: file.path,
         })
     }
 
-    pub fn config(&self) -> &ResolvedConfig {
-        &self.config
+    pub fn config(&self) -> Option<&ResolvedConfig> {
+        self.config.as_ref()
     }
 
     pub fn basename(&self) -> Option<&str> {
@@ -98,7 +98,9 @@ impl<'a> FileMeta<'a> {
     }
 
     pub fn system(&self) -> Option<&str> {
-        if self.depth != 1 {
+        if self.forced_system.is_some() {
+            self.forced_system
+        } else if self.depth != 1 {
             None
         } else {
             system_from_path(&self.path)

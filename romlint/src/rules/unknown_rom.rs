@@ -34,18 +34,16 @@ impl Rule for UnknownRom {
                     hints.insert(0, "Some similar titles were found:".to_string())
                 }
 
-                Some(Diagnostic {
-                    message: "Can't find this ROM in the database".to_string(),
-                    path: file.path().to_path_buf(),
-                    hints,
-                })
+                Some(
+                    Diagnostic::from_file(file, "Can't find this ROM in the database")
+                        .with_hints(hints),
+                )
             }
         } else {
-            Some(Diagnostic {
-                message: format!("{}", 42),
-                path: file.path().to_path_buf(),
-                hints: vec![],
-            })
+            Some(Diagnostic::from_file(
+                file,
+                "Can't find a ROM database to search",
+            ))
         }
     }
 }

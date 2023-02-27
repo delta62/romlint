@@ -11,17 +11,12 @@ impl Rule for MultifileArchive {
         if len == 1 {
             None
         } else if len == 0 {
-            Some(Diagnostic {
-                message: "archive is empty".to_owned(),
-                path: file.path().to_owned(),
-                hints: vec![],
-            })
+            Some(Diagnostic::from_file(file, "archive is empty"))
         } else {
-            Some(Diagnostic {
-                message: "archive should have exactly 1 item".to_owned(),
-                path: file.path().to_owned(),
-                hints: vec![],
-            })
+            Some(Diagnostic::from_file(
+                file,
+                "archive should have exactly 1 item",
+            ))
         }
     }
 }

@@ -17,10 +17,9 @@ impl Rule for ArchivedRomName {
             return None;
         }
 
-        Some(Diagnostic {
-            message: "archived file name should match the archive's name".to_owned(),
-            path: file.path().to_owned(),
-            hints: vec![],
-        })
+        Some(Diagnostic::from_file(
+            file,
+            "archived file name should match the archive's name",
+        ))
     }
 }

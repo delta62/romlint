@@ -75,11 +75,13 @@ fn print_report(report: &Report) {
                 println!("  ├─ {}", diag.message);
             }
 
-            for hint in &diag.hints {
-                if last {
-                    println!("       {}", hint);
-                } else {
-                    println!("  │    {}", hint);
+            if let Some(hints) = &diag.hints {
+                for hint in hints {
+                    if last {
+                        println!("       {}", hint);
+                    } else {
+                        println!("  │    {}", hint);
+                    }
                 }
             }
         }

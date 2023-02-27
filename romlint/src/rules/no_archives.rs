@@ -5,16 +5,20 @@ pub struct NoArchives;
 
 impl Rule for NoArchives {
     fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
-        let extensions = &file.config().archive_formats;
-        let extension = file.extension().unwrap_or("");
+        let config = file.config();
 
-        extensions
-            .iter()
-            .find(|&&e| e == extension)
-            .map(|extension| Diagnostic {
-                path: file.path().to_path_buf(),
-                message: format!("Unextracted archive ({})", extension),
-                hints: vec![],
-            })
+        if let Some(conf) = config {
+            let extensions = &conf.archive_formats;
+            let extension = file.extension().unwrap_or("");
+
+            extensions
+                .iter()
+                .find(|&&e| e == extension)
+                .map(|extension| {
+                    Diagnostic::from_file(file, format!("Unextracted archive ({})", extension))
+                })
+        } else {
+            Some(Diagnostic::unknown_system(file))
+        }
     }
 }

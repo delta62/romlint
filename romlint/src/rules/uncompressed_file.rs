@@ -6,17 +6,19 @@ pub struct UncompressedFile;
 impl Rule for UncompressedFile {
     fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
         let extension = file.extension().unwrap_or("");
-        let archive_extension = &file.config().archive_format;
-        let is_compressed = archive_extension == &extension;
+        let config = file.config();
 
-        if is_compressed {
-            None
+        if let Some(conf) = config {
+            let archive_extension = &conf.archive_format;
+            let is_compressed = archive_extension == &extension;
+
+            if is_compressed {
+                None
+            } else {
+                Some(Diagnostic::from_file(file, "File is not compressed"))
+            }
         } else {
-            Some(Diagnostic {
-                path: file.path().to_path_buf(),
-                message: "File is not compressed".to_string(),
-                hints: vec![],
-            })
+            Some(Diagnostic::unknown_system(file))
         }
     }
 }

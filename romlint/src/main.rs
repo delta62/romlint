@@ -32,11 +32,13 @@ async fn main() {
 }
 
 async fn run(args: Args) -> Result<()> {
-    let config_path = args.resolve_path(args.config_path.as_str());
+    let config_path = args.config_path();
     let config = config::from_path(config_path).await?;
+    let db_path = args.config_dir()?.join(config.db_dir());
+    let databases = db::load_all(&db_path).await?;
+
     let (tx, rx) = mpsc::channel();
     let ui_thread = spawn(move || Ui::new(rx).run());
-    let databases = db::load_all(&args, &config).await?;
 
     let rules: Rules = vec![
         Box::new(NoJunkFiles),

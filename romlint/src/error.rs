@@ -20,6 +20,9 @@ pub enum Error {
 
     #[snafu(display("attempted to send over a broken pipe"))]
     BrokenPipe { source: SendError<Message> },
+
+    #[snafu(display("attempted to read the parent of {}", path.display()))]
+    NoParent { path: PathBuf },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

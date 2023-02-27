@@ -1,6 +1,5 @@
 use crate::error::{DatabaseNameErr, DatabaseReadErr, IoErr, Result};
 use crate::word_match::Tokens;
-use crate::{args::Args, config::Config};
 use no_intro::DataFile;
 use snafu::prelude::*;
 use std::collections::HashMap;
@@ -49,17 +48,13 @@ impl Database {
     }
 }
 
-pub async fn load_all(args: &Args, config: &Config) -> Result<HashMap<String, Database>> {
-    let path = args.resolve_path(config.db_dir());
-    let mut readdir = read_dir(path.as_path()).await.context(IoErr {
-        path: path.as_path(),
-    })?;
+pub async fn load_all<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Database>> {
+    let path = path.as_ref();
+    let mut readdir = read_dir(path).await.context(IoErr { path })?;
     let mut databases = HashMap::new();
 
     loop {
-        let entry = readdir.next_entry().await.context(IoErr {
-            path: path.as_path(),
-        })?;
+        let entry = readdir.next_entry().await.context(IoErr { path })?;
 
         match entry {
             Some(entry) => {

@@ -14,14 +14,14 @@ use std::sync::mpsc::Sender;
 pub async fn scan(args: &Args, config: &Config, rules: &Rules, tx: Sender<Message>) -> Result<()> {
     let cwd = args.cwd();
     let path = cwd.as_path();
+    let system = args.system.clone();
+    let system = system.as_deref();
 
     let mut stream = Box::pin(
-        walk(path.to_path_buf())
+        walk(path)
             .await
             .context(IoErr { path })?
-            .and_then(|file| async move {
-                FileMeta::from_dir_walker(file, args.system.as_str(), config).await
-            }),
+            .and_then(|file| async move { FileMeta::from_dir_walker(file, system, config).await }),
     );
 
     loop {

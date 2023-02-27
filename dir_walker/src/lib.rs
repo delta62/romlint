@@ -16,13 +16,6 @@ pub struct FileMeta {
 }
 
 impl FileMeta {
-    pub async fn from_path<P: AsRef<Path>>(path: P, depth: usize) -> Result<Self> {
-        let meta = metadata(path.as_ref()).await?;
-        let path = path.as_ref().to_path_buf();
-
-        Ok(Self { meta, path, depth })
-    }
-
     async fn from_dir_entry(entry: DirEntry, depth: usize) -> Result<Self> {
         let path = entry.path();
         let meta = metadata(&path).await?;
@@ -31,8 +24,8 @@ impl FileMeta {
     }
 }
 
-pub async fn walk(path: PathBuf) -> Result<impl Stream<Item = MetaResult>> {
-    Ok(dir(path, 0)
+pub async fn walk<P: Into<PathBuf>>(path: P) -> Result<impl Stream<Item = MetaResult>> {
+    Ok(dir(path.into(), 0)
         .await?
         .and_then(move |entry| dir_or_singleton(entry, 1))
         .boxed()

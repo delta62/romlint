@@ -24,21 +24,31 @@ impl ArchiveInfo {
 
 pub struct FileMeta<'a> {
     config: ResolvedConfig<'a>,
+    depth: usize,
     meta: Metadata,
     path: PathBuf,
     archive: Option<ArchiveInfo>,
-    system: String,
+}
+
+fn system_from_path(path: &PathBuf) -> Option<&str> {
+    path.parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
 }
 
 impl<'a> FileMeta<'a> {
     pub async fn from_dir_walker<'b: 'a>(
         file: DirMeta,
-        system: &str,
+        system: Option<&'b str>,
         config: &'b Config,
     ) -> Result<FileMeta<'a>> {
+        let config = system
+            .or_else(|| system_from_path(&file.path))
+            .and_then(|sys| config.resolve(sys));
+
+        let config = config.unwrap();
         let extension = file.path.extension().and_then(|os| os.to_str());
         let mut archive = None;
-        let config = config.resolve(system).unwrap();
 
         if let Some("zip") = extension {
             let path = file.path.clone();
@@ -56,10 +66,10 @@ impl<'a> FileMeta<'a> {
 
         Ok(Self {
             archive,
+            depth: file.depth,
             config,
             meta: file.meta,
             path: file.path,
-            system: system.to_owned(),
         })
     }
 
@@ -87,7 +97,11 @@ impl<'a> FileMeta<'a> {
         self.archive.as_ref()
     }
 
-    pub fn system(&self) -> &str {
-        self.system.as_str()
+    pub fn system(&self) -> Option<&str> {
+        if self.depth != 1 {
+            None
+        } else {
+            system_from_path(&self.path)
+        }
     }
 }

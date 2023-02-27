@@ -16,28 +16,35 @@ impl UnknownRom {
 
 impl Rule for UnknownRom {
     fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
-        let system = file.system();
-        let db = self.databases.get(system).unwrap();
+        let db = file.system().and_then(|sys| self.databases.get(sys));
 
-        if db.contains(file.path().file_name().unwrap().to_str().unwrap()) {
-            None
-        } else {
-            let path_str = file.path().to_str().unwrap();
-            let file_tokens = Tokens::from_str(path_str);
-            let similar_titles = db.similar_to(&file_tokens);
-            let mut hints = similar_titles
-                .iter()
-                .map(|title| format!("* {}", title))
-                .collect::<Vec<_>>();
+        if let Some(db) = db {
+            if db.contains(file.path().file_name().unwrap().to_str().unwrap()) {
+                None
+            } else {
+                let path_str = file.path().to_str().unwrap();
+                let file_tokens = Tokens::from_str(path_str);
+                let similar_titles = db.similar_to(&file_tokens);
+                let mut hints = similar_titles
+                    .iter()
+                    .map(|title| format!("* {}", title))
+                    .collect::<Vec<_>>();
 
-            if !hints.is_empty() {
-                hints.insert(0, "Some similar titles were found:".to_string())
+                if !hints.is_empty() {
+                    hints.insert(0, "Some similar titles were found:".to_string())
+                }
+
+                Some(Diagnostic {
+                    message: "Can't find this ROM in the database".to_string(),
+                    path: file.path().to_path_buf(),
+                    hints,
+                })
             }
-
+        } else {
             Some(Diagnostic {
-                message: "Can't find this ROM in the database".to_string(),
+                message: format!("{}", 42),
                 path: file.path().to_path_buf(),
-                hints,
+                hints: vec![],
             })
         }
     }

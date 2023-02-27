@@ -12,7 +12,7 @@ pub struct Args {
     pub config_path: String,
 
     #[clap(short, long)]
-    pub system: String,
+    pub system: Option<String>,
 }
 
 impl Args {

@@ -27,7 +27,7 @@ pub fn check<P: AsRef<Path>>(
 
     let diagnostics = rules
         .iter()
-        .filter_map(|rule| rule.check(file))
+        .filter_map(|rule| rule.check(file).err())
         .collect::<Vec<_>>();
     let report = Report { diagnostics, path };
 

@@ -6,6 +6,7 @@ pub struct Diagnostic {
     pub message: String,
     pub path: PathBuf,
     pub hints: Option<Vec<String>>,
+    pub terminal: bool,
 }
 
 impl Diagnostic {
@@ -14,6 +15,7 @@ impl Diagnostic {
             hints: None,
             message: message.into(),
             path: file.path().to_path_buf(),
+            terminal: false,
         }
     }
 
@@ -23,18 +25,19 @@ impl Diagnostic {
     }
 
     pub fn unknown_system(file: &FileMeta) -> Self {
-        let system_name = file.system().unwrap_or("--unknown--");
+        let system_name = file.system().unwrap_or("none");
 
         Self {
             message: "Can't find configuration data for this system".to_owned(),
             path: file.path().to_path_buf(),
             hints: Some(vec![format!("Detected system: {}", system_name)]),
+            terminal: true,
         }
     }
 }
 
 pub trait Rule {
-    fn check(&self, file: &FileMeta) -> Option<Diagnostic>;
+    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic>;
 }
 
 pub type Rules = Vec<Box<dyn Rule + Sync + Send>>;

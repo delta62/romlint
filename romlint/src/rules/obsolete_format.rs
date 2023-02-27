@@ -4,21 +4,22 @@ use crate::linter::{Diagnostic, Rule};
 pub struct ObsoleteFormat;
 
 impl Rule for ObsoleteFormat {
-    fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
-        let config = file.config();
+    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic> {
+        let config = file
+            .config()
+            .ok_or_else(|| Diagnostic::unknown_system(file))?;
 
-        if let Some(conf) = config {
-            let obsolete_formats = &conf.obsolete_formats;
-            let extension = file.extension().unwrap_or("");
+        let obsolete_formats = &config.obsolete_formats;
+        let extension = file.extension().unwrap_or("");
+        let found_format = obsolete_formats.iter().any(|e| e == &extension);
 
-            obsolete_formats
-                .iter()
-                .find(|&e| e == &extension)
-                .map(|extension| {
-                    Diagnostic::from_file(file, format!("Obsolete format ({})", extension))
-                })
-        } else {
-            Some(Diagnostic::unknown_system(file))
+        if found_format {
+            Err(Diagnostic::from_file(
+                file,
+                format!("Obsolete format ({})", extension),
+            ))?;
         }
+
+        Ok(())
     }
 }

@@ -4,20 +4,20 @@ use crate::linter::{Diagnostic, Rule};
 pub struct ArchivedRomName;
 
 impl Rule for ArchivedRomName {
-    fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
+    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic> {
         // For files which are not archived, this rule is not applicable
         if let Some(archive) = file.archive() {
             let archive_basename = file.basename().unwrap();
             let contains_match = archive.file_names().any(|name| name == archive_basename);
 
             if contains_match {
-                return None;
+                return Ok(());
             }
         } else {
-            return None;
+            return Ok(());
         }
 
-        Some(Diagnostic::from_file(
+        Err(Diagnostic::from_file(
             file,
             "archived file name should match the archive's name",
         ))

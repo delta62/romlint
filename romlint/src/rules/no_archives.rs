@@ -4,21 +4,22 @@ use crate::linter::{Diagnostic, Rule};
 pub struct NoArchives;
 
 impl Rule for NoArchives {
-    fn check(&self, file: &FileMeta) -> Option<Diagnostic> {
-        let config = file.config();
+    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic> {
+        let config = file
+            .config()
+            .ok_or_else(|| Diagnostic::unknown_system(file))?;
 
-        if let Some(conf) = config {
-            let extensions = &conf.archive_formats;
-            let extension = file.extension().unwrap_or("");
+        let extensions = &config.archive_formats;
+        let extension = file.extension().unwrap_or("");
+        let found_ext = extensions.iter().any(|&e| e == extension);
 
-            extensions
-                .iter()
-                .find(|&&e| e == extension)
-                .map(|extension| {
-                    Diagnostic::from_file(file, format!("Unextracted archive ({})", extension))
-                })
-        } else {
-            Some(Diagnostic::unknown_system(file))
+        if found_ext {
+            Err(Diagnostic::from_file(
+                file,
+                format!("Unextracted archive ({})", extension),
+            ))?;
         }
+
+        Ok(())
     }
 }

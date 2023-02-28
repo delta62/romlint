@@ -1,5 +1,7 @@
 use crate::error::{DatabaseNameErr, DatabaseReadErr, IoErr, Result};
 use crate::word_match::Tokens;
+use futures::future::try_join_all;
+use futures::FutureExt;
 use no_intro::DataFile;
 use snafu::prelude::*;
 use std::collections::HashMap;
@@ -53,29 +55,22 @@ impl Database {
 pub async fn load_all<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Database>> {
     let path = path.as_ref();
     let mut readdir = read_dir(path).await.context(IoErr { path })?;
-    let mut databases = HashMap::new();
+    let mut futures = Vec::new();
 
-    loop {
-        let entry = readdir.next_entry().await.context(IoErr { path })?;
+    while let Some(entry) = readdir.next_entry().await.context(IoErr { path })? {
+        let path = entry.path();
+        let system = path
+            .as_path()
+            .file_stem()
+            .and_then(|f| f.to_str())
+            .map(|s| s.to_owned())
+            .context(DatabaseNameErr {
+                path: path.as_path(),
+            })?;
 
-        match entry {
-            Some(entry) => {
-                let path = entry.path();
-                let system = path
-                    .as_path()
-                    .file_stem()
-                    .and_then(|f| f.to_str())
-                    .map(|s| s.to_owned())
-                    .context(DatabaseNameErr {
-                        path: path.as_path(),
-                    })?;
-
-                let db = Database::from_file(path).await?;
-                databases.insert(system, db);
-            }
-            None => break,
-        }
+        let future = Database::from_file(path).map(|db| db.map(|db| (system, db)));
+        futures.push(future);
     }
 
-    Ok(databases)
+    Ok(try_join_all(futures).await?.into_iter().collect())
 }

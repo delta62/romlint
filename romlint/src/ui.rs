@@ -70,17 +70,17 @@ fn print_report(report: &Report) {
             let last = i == report.diagnostics.len() - 1;
 
             if last {
-                println!("  └─ {}", diag.message);
+                println!("   └─ {}", diag.message);
             } else {
-                println!("  ├─ {}", diag.message);
+                println!("   ├─ {}", diag.message);
             }
 
             if let Some(hints) = &diag.hints {
                 for hint in hints {
                     if last {
-                        println!("       {}", hint);
+                        println!("        {}", hint);
                     } else {
-                        println!("  │    {}", hint);
+                        println!("   │    {}", hint);
                     }
                 }
             }

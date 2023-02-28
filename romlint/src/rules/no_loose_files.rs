@@ -22,7 +22,7 @@ impl Rule for NoLooseFiles {
             .chain(once(&config.archive_format))
             .chain(once(&config.raw_format));
 
-        let is_loose_file = allowed_extensions.any(|e| e == &extension);
+        let is_loose_file = !allowed_extensions.any(|e| e == &extension);
 
         if is_loose_file {
             Err(Diagnostic::from_file(file, "Loose file"))?;

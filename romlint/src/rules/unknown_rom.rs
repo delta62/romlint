@@ -21,7 +21,7 @@ impl Rule for UnknownRom {
             .and_then(|sys| self.databases.get(sys))
             .ok_or_else(|| Diagnostic::from_file(file, "Can't find a ROM database to search"))?;
 
-        let file_name = file.path().file_name().unwrap().to_str().unwrap();
+        let file_name = file.path().file_stem().unwrap().to_str().unwrap();
         if db.contains(file_name) {
             return Ok(());
         }

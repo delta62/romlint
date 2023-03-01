@@ -144,7 +144,7 @@ fn format_duration(duration: &Duration) -> String {
 
 fn print_report(report: &Report) {
     if report.ok() {
-        println!(" {}", Green.paint(report.path.as_str()));
+        println!("{}", Green.paint(format!(" {}", report.path.as_str())));
     } else {
         println!("{}", Red.paint(format!("❌ {}", report.path.as_str())));
         for (i, diag) in report.diagnostics.iter().enumerate() {

@@ -13,7 +13,7 @@ pub fn check<P: AsRef<Path>>(
     file: &FileMeta,
     rules: &Rules,
     tx: &Sender<Message>,
-) -> Result<()> {
+) -> Result<bool> {
     let path = file
         .path()
         .strip_prefix(cwd)
@@ -39,9 +39,10 @@ pub fn check<P: AsRef<Path>>(
         }
     }
 
+    let passed = diagnostics.is_empty();
     let report = Report { diagnostics, path };
 
     tx.send(Message::Report(report)).context(BrokenPipeErr {})?;
 
-    Ok(())
+    Ok(passed)
 }

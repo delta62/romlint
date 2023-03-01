@@ -13,15 +13,14 @@ mod word_match;
 use args::Args;
 use clap::Parser;
 use commands::scan;
-use error::{BrokenPipeErr, Result};
+use error::Result;
 use linter::Rules;
 use rules::{
     FilePermissions, MultifileArchive, NoArchives, NoLooseFiles, ObsoleteFormat, UncompressedFile,
     UnknownRom,
 };
-use snafu::prelude::*;
 use std::{sync::mpsc, thread::spawn};
-use ui::{Message, Ui};
+use ui::Ui;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -52,7 +51,6 @@ async fn run(args: Args) -> Result<()> {
 
     scan(&args, &config, &rules, tx.clone()).await?;
 
-    tx.send(Message::Finished).context(BrokenPipeErr {})?;
     ui_thread.join().unwrap()?;
 
     Ok(())

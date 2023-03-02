@@ -1,6 +1,5 @@
 use crate::filemeta::FileMeta;
 use crate::linter::{Diagnostic, Rule};
-use std::iter::once;
 
 pub struct NoLooseFiles;
 
@@ -18,9 +17,9 @@ impl Rule for NoLooseFiles {
         let mut allowed_extensions = config
             .archive_formats
             .iter()
+            .chain(config.raw_format.iter())
             .chain(obsolete_formats.iter())
-            .chain(once(&config.archive_format))
-            .chain(once(&config.raw_format));
+            .chain(config.archive_format.iter());
 
         let is_loose_file = !allowed_extensions.any(|e| e == &extension);
 

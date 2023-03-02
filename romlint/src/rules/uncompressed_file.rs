@@ -11,7 +11,7 @@ impl Rule for UncompressedFile {
             .ok_or_else(|| Diagnostic::unknown_system(file))?;
 
         let archive_extension = &config.archive_format;
-        let is_compressed = archive_extension == &extension;
+        let is_compressed = archive_extension.contains(&extension);
 
         if is_compressed {
             Ok(())

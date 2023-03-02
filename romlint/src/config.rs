@@ -1,7 +1,11 @@
 use crate::error::{ConfigReadErr, IoErr, Result};
-use serde::Deserialize;
+use serde::{
+    de::{self, value::SeqAccessDeserializer, Visitor},
+    Deserialize, Deserializer,
+};
 use snafu::prelude::*;
-use std::{collections::HashMap, path::Path};
+use std::fmt::{self, Formatter};
+use std::{collections::HashMap, marker::PhantomData, path::Path};
 use tokio::fs::read_to_string;
 use toml::from_str;
 
@@ -21,15 +25,18 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct GlobalConfig {
-    archive_formats: Vec<String>,
+    #[serde(deserialize_with = "string_or_vec")]
+    archive_format: Vec<String>,
     db_dir: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SystemConfig {
-    archive_format: String,
+    #[serde(deserialize_with = "string_or_vec")]
+    archive_format: Vec<String>,
     obsolete_formats: Option<Vec<String>>,
-    raw_format: String,
+    #[serde(deserialize_with = "string_or_vec")]
+    raw_format: Vec<String>,
 }
 
 impl Config {
@@ -37,12 +44,12 @@ impl Config {
         self.systems.get(system).map(|sys| ResolvedConfig {
             archive_formats: self
                 .global
-                .archive_formats
+                .archive_format
                 .iter()
                 .map(|s| s.as_str())
                 .collect(),
-            raw_format: sys.raw_format.as_str(),
-            archive_format: sys.archive_format.as_str(),
+            raw_format: sys.raw_format.iter().map(|s| s.as_str()).collect(),
+            archive_format: sys.archive_format.iter().map(|s| s.as_str()).collect(),
             obsolete_formats: sys
                 .obsolete_formats
                 .as_ref()
@@ -57,7 +64,38 @@ impl Config {
 
 pub struct ResolvedConfig<'a> {
     pub archive_formats: Vec<&'a str>,
-    pub archive_format: &'a str,
+    pub archive_format: Vec<&'a str>,
     pub obsolete_formats: Option<Vec<&'a str>>,
-    pub raw_format: &'a str,
+    pub raw_format: Vec<&'a str>,
+}
+
+fn string_or_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct StringOrVec(PhantomData<fn() -> String>);
+
+    impl<'de> Visitor<'de> for StringOrVec {
+        type Value = Vec<String>;
+
+        fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
+            formatter.write_str("string or array")
+        }
+
+        fn visit_string<E>(self, v: String) -> std::result::Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![v])
+        }
+
+        fn visit_seq<A>(self, seq: A) -> std::result::Result<Self::Value, A::Error>
+        where
+            A: serde::de::SeqAccess<'de>,
+        {
+            Deserialize::deserialize(SeqAccessDeserializer::new(seq))
+        }
+    }
+
+    deserializer.deserialize_any(StringOrVec(PhantomData))
 }

@@ -32,38 +32,18 @@ pub enum DataFileItem {
 
 #[derive(Debug, Deserialize)]
 pub struct Header {
-    pub id: usize,
     pub name: String,
     pub description: String,
     pub version: String,
     pub author: String,
     pub homepage: String,
     pub url: String,
-    pub clrmamepro: ClrMamePro,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ClrMamePro {
-    pub forcenodump: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Game {
     pub name: String,
     pub description: String,
-    pub rom: Rom,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Rom {
-    pub name: String,
-    pub size: usize,
-    pub crc: String,
-    pub md5: String,
-    pub sha1: String,
-    pub sha256: Option<String>,
-    pub status: Option<String>,
-    pub serial: Option<String>,
 }
 
 impl DataFile {

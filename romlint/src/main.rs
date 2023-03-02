@@ -16,8 +16,8 @@ use commands::scan;
 use error::Result;
 use linter::Rules;
 use rules::{
-    FilePermissions, MultifileArchive, NoArchives, NoLooseFiles, ObsoleteFormat, UncompressedFile,
-    UnknownRom,
+    ArchivedRomName, FilePermissions, MultifileArchive, NoArchives, NoLooseFiles, ObsoleteFormat,
+    UncompressedFile, UnknownRom,
 };
 use std::{sync::mpsc, thread::spawn};
 use ui::Ui;
@@ -34,12 +34,17 @@ async fn run(args: Args) -> Result<()> {
     let config_path = args.config_path();
     let config = config::from_path(config_path).await?;
     let db_path = args.config_dir()?.join(config.db_dir());
-    let databases = db::load_all(&db_path).await?;
 
     let (tx, rx) = mpsc::channel();
     let ui_thread = spawn(move || Ui::new(rx).run());
+    let databases = if let Some(sys) = &args.system {
+        db::load_only(&db_path, &[sys.as_str()]).await?
+    } else {
+        db::load_all(&db_path).await?
+    };
 
     let rules: Rules = vec![
+        Box::new(ArchivedRomName),
         Box::new(NoLooseFiles),
         Box::new(NoArchives),
         Box::new(FilePermissions),

@@ -74,3 +74,17 @@ pub async fn load_all<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Databas
 
     Ok(try_join_all(futures).await?.into_iter().collect())
 }
+
+pub async fn load_only<P: AsRef<Path>>(
+    path: P,
+    systems: &[&str],
+) -> Result<HashMap<String, Database>> {
+    let path = path.as_ref();
+    let futures = systems.iter().map(|sys| {
+        let mut path = path.join(sys);
+        path.set_extension("dat");
+        Database::from_file(path).map(|db| db.map(|db| (sys.to_string(), db)))
+    });
+
+    Ok(try_join_all(futures).await?.into_iter().collect())
+}

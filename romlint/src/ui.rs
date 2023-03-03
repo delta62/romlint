@@ -1,4 +1,4 @@
-use crate::ansi::{clear_line, move_to_line_start, print_status};
+use crate::ansi::{clear_line, move_to_line_start, move_up_lines, print_status};
 use crate::error::{IoErr, Result};
 use crate::linter::Diagnostic;
 use nu_ansi_term::Color::{Blue, Green, Red};
@@ -62,6 +62,8 @@ impl Report {
 pub enum Message {
     Finished(Summary),
     SetStatus(String),
+    StartProgress(usize, String),
+    EndProgress(usize),
     Report(Report),
 }
 
@@ -76,12 +78,23 @@ impl Ui {
 
     pub fn run(self) -> Result<()> {
         let mut icons = ['⣷', '⣯', '⣟', '⡿', '⢿', '⣻', '⣽', '⣾'].iter().cycle();
-        let mut status = "".to_string();
+        let mut status = "Initializing...".to_string();
+        let mut loading_items = Vec::new();
+        let mut last_load_printed = false;
 
         'outer: loop {
             while let Ok(message) = self.channel.try_recv() {
                 clear_line().context(IoErr { path: "stdout" })?;
                 match message {
+                    Message::StartProgress(_id, name) => {
+                        println!();
+                        loading_items.push((name, true))
+                    }
+                    Message::EndProgress(id) => {
+                        loading_items
+                            .get_mut(id)
+                            .map(|(_, is_loading)| *is_loading = false);
+                    }
                     Message::Finished(summary) => {
                         clear_line().context(IoErr { path: "stdout" })?;
                         println!();
@@ -96,12 +109,27 @@ impl Ui {
                 }
             }
 
+            let done_loading = loading_items.iter().all(|(_, is_loading)| !is_loading);
+            if !done_loading || !last_load_printed {
+                print_loading_status(&loading_items);
+            }
+
+            last_load_printed = done_loading;
+
             let message = format!("{} >> {}", icons.next().unwrap(), Blue.paint(&status));
             print_status(message).context(IoErr { path: "stdout" })?;
             std::thread::sleep(Duration::from_millis(100));
         }
 
         Ok(())
+    }
+}
+
+fn print_loading_status(items: &[(String, bool)]) {
+    move_up_lines(items.len()).unwrap();
+    for (system_name, is_loading) in items {
+        let done_text = if *is_loading { "" } else { "✓" };
+        println!("Loading {} roms... {}", system_name, Green.paint(done_text));
     }
 }
 

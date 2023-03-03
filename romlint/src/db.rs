@@ -1,11 +1,13 @@
 use crate::error::{DatabaseNameErr, DatabaseReadErr, IoErr, Result};
+use crate::ui::Message;
 use crate::word_match::Tokens;
 use futures::future::try_join_all;
-use futures::FutureExt;
+use futures::TryFutureExt;
 use no_intro::DataFile;
 use snafu::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::mpsc::Sender;
 use tokio::fs::{read_dir, read_to_string};
 
 pub struct Database(DataFile);
@@ -52,12 +54,18 @@ impl Database {
     }
 }
 
-pub async fn load_all<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Database>> {
+pub async fn load_all<P: AsRef<Path>>(
+    path: P,
+    sender: &Sender<Message>,
+) -> Result<HashMap<String, Database>> {
     let path = path.as_ref();
     let mut readdir = read_dir(path).await.context(IoErr { path })?;
     let mut futures = Vec::new();
+    let mut i = 0;
 
     while let Some(entry) = readdir.next_entry().await.context(IoErr { path })? {
+        let idx = i;
+        i += 1;
         let path = entry.path();
         let system = path
             .as_path()
@@ -68,7 +76,13 @@ pub async fn load_all<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Databas
                 path: path.as_path(),
             })?;
 
-        let future = Database::from_file(path).map(|db| db.map(|db| (system, db)));
+        sender
+            .send(Message::StartProgress(idx, system.clone()))
+            .unwrap();
+
+        let future = Database::from_file(path)
+            .map_ok(|db| (system, db))
+            .inspect_ok(move |_| sender.send(Message::EndProgress(idx)).unwrap());
         futures.push(future);
     }
 
@@ -78,12 +92,22 @@ pub async fn load_all<P: AsRef<Path>>(path: P) -> Result<HashMap<String, Databas
 pub async fn load_only<P: AsRef<Path>>(
     path: P,
     systems: &[&str],
+    sender: &Sender<Message>,
 ) -> Result<HashMap<String, Database>> {
     let path = path.as_ref();
-    let futures = systems.iter().map(|sys| {
+    let futures = systems.iter().enumerate().map(|(i, sys)| {
         let mut path = path.join(sys);
         path.set_extension("dat");
-        Database::from_file(path).map(|db| db.map(|db| (sys.to_string(), db)))
+        sender
+            .send(Message::StartProgress(i, sys.to_string()))
+            .unwrap();
+
+        Database::from_file(path)
+            .map_ok(move |db| (i, sys.to_string(), db))
+            .inspect_ok(|(i, _, _)| {
+                sender.send(Message::EndProgress(*i)).unwrap();
+            })
+            .map_ok(|(_, sys, db)| (sys, db))
     });
 
     Ok(try_join_all(futures).await?.into_iter().collect())

@@ -38,9 +38,9 @@ async fn run(args: Args) -> Result<()> {
     let (tx, rx) = mpsc::channel();
     let ui_thread = spawn(move || Ui::new(rx).run());
     let databases = if let Some(sys) = &args.system {
-        db::load_only(&db_path, &[sys.as_str()]).await?
+        db::load_only(&db_path, &[sys.as_str()], &tx).await?
     } else {
-        db::load_all(&db_path).await?
+        db::load_all(&db_path, &tx).await?
     };
 
     let rules: Rules = vec![

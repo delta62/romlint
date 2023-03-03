@@ -4,7 +4,7 @@ use crate::linter::{Diagnostic, Rule};
 pub struct NoLooseFiles;
 
 impl Rule for NoLooseFiles {
-    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic> {
+    fn check(&mut self, file: &FileMeta) -> Result<(), Diagnostic> {
         let extension = file.extension().unwrap_or("");
         let config = file
             .config()

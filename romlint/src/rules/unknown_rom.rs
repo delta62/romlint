@@ -15,7 +15,7 @@ impl UnknownRom {
 }
 
 impl Rule for UnknownRom {
-    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic> {
+    fn check(&mut self, file: &FileMeta) -> Result<(), Diagnostic> {
         let db = file
             .system()
             .and_then(|sys| self.databases.get(sys))

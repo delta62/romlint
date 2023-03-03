@@ -4,7 +4,7 @@ use crate::linter::{Diagnostic, Rule};
 pub struct ArchivedRomName;
 
 impl Rule for ArchivedRomName {
-    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic> {
+    fn check(&mut self, file: &FileMeta) -> Result<(), Diagnostic> {
         // For files which are not archived, this rule is not applicable
         if let Some(archive) = file.archive() {
             let archive_basename = file.basename().unwrap();

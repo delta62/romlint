@@ -11,7 +11,7 @@ use std::sync::mpsc::Sender;
 pub fn check<P: AsRef<Path>>(
     cwd: P,
     file: &FileMeta,
-    rules: &Rules,
+    rules: &mut Rules,
     tx: &Sender<Message>,
 ) -> Result<bool> {
     let path = file

@@ -5,7 +5,7 @@ use std::os::unix::prelude::PermissionsExt;
 pub struct FilePermissions;
 
 impl Rule for FilePermissions {
-    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic> {
+    fn check(&mut self, file: &FileMeta) -> Result<(), Diagnostic> {
         let mode = file.metadata().permissions().mode() & 0o777;
         let is_dir = file.metadata().is_dir();
 

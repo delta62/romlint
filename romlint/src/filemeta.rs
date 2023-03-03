@@ -10,6 +10,8 @@ use zip::ZipArchive;
 
 pub struct ArchiveInfo {
     file_names: Vec<String>,
+    pub compressed_size: u64,
+    pub uncompressed_size: u64,
 }
 
 impl ArchiveInfo {
@@ -54,10 +56,23 @@ impl<'a> FileMeta<'a> {
             let info = spawn_blocking(|| -> Result<Option<ArchiveInfo>> {
                 let file = File::open(path)?;
                 let reader = BufReader::new(file);
-                let zip = ZipArchive::new(reader).unwrap();
-                let file_names = zip.file_names().map(|s| s.to_owned()).collect();
+                let mut zip = ZipArchive::new(reader).unwrap();
+                let mut uncompressed_size = 0;
+                let mut compressed_size = 0;
+                let mut file_names = Vec::with_capacity(zip.len());
 
-                Ok(Some(ArchiveInfo { file_names }))
+                for i in 0..zip.len() {
+                    let file = zip.by_index_raw(i).unwrap();
+                    uncompressed_size += file.size();
+                    compressed_size += file.compressed_size();
+                    file_names.push(file.name().to_string());
+                }
+
+                Ok(Some(ArchiveInfo {
+                    file_names,
+                    uncompressed_size,
+                    compressed_size,
+                }))
             })
             .await??;
             archive = info;

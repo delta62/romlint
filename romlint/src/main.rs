@@ -19,7 +19,10 @@ use rules::{
     ArchivedRomName, FilePermissions, MultifileArchive, NoArchives, NoLooseFiles, ObsoleteFormat,
     UncompressedFile, UnknownRom,
 };
-use std::{sync::mpsc, thread::spawn};
+use std::{
+    sync::{mpsc, Arc, Mutex},
+    thread::spawn,
+};
 use ui::Ui;
 
 #[tokio::main(flavor = "current_thread")]
@@ -49,7 +52,7 @@ async fn run(args: Args) -> Result<()> {
         Box::new(FilePermissions),
         Box::new(ObsoleteFormat),
         Box::new(UnknownRom::new(databases)),
-        Box::new(UncompressedFile),
+        Box::new(UncompressedFile::default()),
         Box::new(MultifileArchive),
     ];
 
@@ -57,7 +60,9 @@ async fn run(args: Args) -> Result<()> {
         rules.push(Box::new(ArchivedRomName));
     }
 
-    scan(&args, &config, &rules, tx.clone()).await?;
+    let rules = Arc::new(Mutex::new(rules));
+
+    scan(&args, &config, rules, tx.clone()).await?;
 
     ui_thread.join().unwrap()?;
 

@@ -4,7 +4,7 @@ use crate::linter::{Diagnostic, Rule};
 pub struct MultifileArchive;
 
 impl Rule for MultifileArchive {
-    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic> {
+    fn check(&mut self, file: &FileMeta) -> Result<(), Diagnostic> {
         // For files which are not archived, this rule is not applicable
         let len = file.archive().map(|arc| arc.len()).unwrap_or(1);
 

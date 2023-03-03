@@ -4,7 +4,7 @@ use crate::linter::{Diagnostic, Rule};
 pub struct ObsoleteFormat;
 
 impl Rule for ObsoleteFormat {
-    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic> {
+    fn check(&mut self, file: &FileMeta) -> Result<(), Diagnostic> {
         let config = file
             .config()
             .ok_or_else(|| Diagnostic::unknown_system(file))?;

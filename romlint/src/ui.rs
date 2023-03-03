@@ -19,6 +19,7 @@ pub struct Summary {
     total_fails: usize,
     start_time: Instant,
     end_time: Option<Instant>,
+    help: Vec<String>,
 }
 
 impl Summary {
@@ -29,6 +30,7 @@ impl Summary {
             total_fails: 0,
             start_time,
             end_time: None,
+            help: vec![],
         }
     }
 
@@ -44,6 +46,10 @@ impl Summary {
 
     pub fn mark_ended(&mut self) {
         self.end_time = Some(Instant::now());
+    }
+
+    pub fn add_help_text<S: Into<String>>(&mut self, text: S) {
+        self.help.push(text.into());
     }
 }
 
@@ -158,6 +164,10 @@ fn print_summary(summary: &Summary) {
         summary.total_passes + summary.total_fails,
         Blue.paint(duration)
     );
+
+    for help_text in &summary.help {
+        println!("* {}", help_text);
+    }
 }
 
 fn format_duration(duration: &Duration) -> String {

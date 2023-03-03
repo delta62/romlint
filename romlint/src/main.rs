@@ -43,8 +43,7 @@ async fn run(args: Args) -> Result<()> {
         db::load_all(&db_path, &tx).await?
     };
 
-    let rules: Rules = vec![
-        Box::new(ArchivedRomName),
+    let mut rules: Rules = vec![
         Box::new(NoLooseFiles),
         Box::new(NoArchives),
         Box::new(FilePermissions),
@@ -53,6 +52,10 @@ async fn run(args: Args) -> Result<()> {
         Box::new(UncompressedFile),
         Box::new(MultifileArchive),
     ];
+
+    if !args.no_archived_file_name {
+        rules.push(Box::new(ArchivedRomName));
+    }
 
     scan(&args, &config, &rules, tx.clone()).await?;
 

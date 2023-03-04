@@ -41,11 +41,8 @@ impl Diagnostic {
 }
 
 pub trait Rule {
-    fn check(&mut self, file: &FileMeta) -> Result<(), Diagnostic>;
-
-    fn help_text(&self) -> Vec<String> {
-        vec![]
-    }
+    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic>;
+    fn check_archive(&self, file: &FileMeta) -> Result<(), Diagnostic>;
 }
 
 pub type Rules = Vec<Box<dyn Rule + Sync + Send>>;

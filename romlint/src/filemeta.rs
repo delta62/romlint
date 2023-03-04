@@ -44,6 +44,7 @@ impl<'a> FileMeta<'a> {
         file: DirMeta,
         system: Option<&'b str>,
         config: &'b Config,
+        read_archives: bool,
     ) -> Result<FileMeta<'a>> {
         let config = system
             .or_else(|| system_from_path(&file.path))
@@ -52,30 +53,32 @@ impl<'a> FileMeta<'a> {
         let mut archive = None;
 
         if let Some("zip") = extension {
-            let path = file.path.clone();
-            let info = spawn_blocking(|| -> Result<Option<ArchiveInfo>> {
-                let file = File::open(path)?;
-                let reader = BufReader::new(file);
-                let mut zip = ZipArchive::new(reader).unwrap();
-                let mut uncompressed_size = 0;
-                let mut compressed_size = 0;
-                let mut file_names = Vec::with_capacity(zip.len());
+            if read_archives {
+                let path = file.path.clone();
+                let info = spawn_blocking(|| -> Result<Option<ArchiveInfo>> {
+                    let file = File::open(path)?;
+                    let reader = BufReader::new(file);
+                    let mut zip = ZipArchive::new(reader).unwrap();
+                    let mut uncompressed_size = 0;
+                    let mut compressed_size = 0;
+                    let mut file_names = Vec::with_capacity(zip.len());
 
-                for i in 0..zip.len() {
-                    let file = zip.by_index_raw(i).unwrap();
-                    uncompressed_size += file.size();
-                    compressed_size += file.compressed_size();
-                    file_names.push(file.name().to_string());
-                }
+                    for i in 0..zip.len() {
+                        let file = zip.by_index_raw(i).unwrap();
+                        uncompressed_size += file.size();
+                        compressed_size += file.compressed_size();
+                        file_names.push(file.name().to_string());
+                    }
 
-                Ok(Some(ArchiveInfo {
-                    file_names,
-                    uncompressed_size,
-                    compressed_size,
-                }))
-            })
-            .await??;
-            archive = info;
+                    Ok(Some(ArchiveInfo {
+                        file_names,
+                        uncompressed_size,
+                        compressed_size,
+                    }))
+                })
+                .await??;
+                archive = info;
+            }
         };
 
         Ok(Self {

@@ -25,8 +25,6 @@ pub struct Config {
 
 #[derive(Debug, Deserialize)]
 pub struct GlobalConfig {
-    #[serde(deserialize_with = "string_or_vec")]
-    archive_format: Vec<String>,
     db_dir: String,
 }
 
@@ -42,12 +40,6 @@ pub struct SystemConfig {
 impl Config {
     pub fn resolve(&self, system: &str) -> Option<ResolvedConfig<'_>> {
         self.systems.get(system).map(|sys| ResolvedConfig {
-            archive_formats: self
-                .global
-                .archive_format
-                .iter()
-                .map(|s| s.as_str())
-                .collect(),
             raw_format: sys.raw_format.iter().map(|s| s.as_str()).collect(),
             archive_format: sys.archive_format.iter().map(|s| s.as_str()).collect(),
             obsolete_formats: sys
@@ -63,7 +55,6 @@ impl Config {
 }
 
 pub struct ResolvedConfig<'a> {
-    pub archive_formats: Vec<&'a str>,
     pub archive_format: Vec<&'a str>,
     pub obsolete_formats: Option<Vec<&'a str>>,
     pub raw_format: Vec<&'a str>,

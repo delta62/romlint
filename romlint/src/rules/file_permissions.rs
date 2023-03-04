@@ -5,7 +5,7 @@ use std::os::unix::prelude::PermissionsExt;
 pub struct FilePermissions;
 
 impl Rule for FilePermissions {
-    fn check(&mut self, file: &FileMeta) -> Result<(), Diagnostic> {
+    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic> {
         let mode = file.metadata().permissions().mode() & 0o777;
         let is_dir = file.metadata().is_dir();
 
@@ -26,5 +26,10 @@ impl Rule for FilePermissions {
                 ),
             )),
         }
+    }
+
+    fn check_archive(&self, _file: &FileMeta) -> Result<(), Diagnostic> {
+        // TODO: Add permission metadata to compressed files
+        Ok(())
     }
 }

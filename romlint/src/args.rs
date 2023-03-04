@@ -20,9 +20,10 @@ pub struct Args {
     #[clap(short, long)]
     pub system: Option<String>,
 
-    /// Skip the archive_file_name rule
+    /// Do not perform any checks that look inside of archives. This will run fewer
+    /// checks but will result in a large performance boost.
     #[clap(long, default_value_t = false)]
-    pub no_archived_file_name: bool,
+    pub no_archive_checks: bool,
 }
 
 impl Args {

@@ -11,8 +11,9 @@ use std::sync::mpsc::Sender;
 pub fn check<P: AsRef<Path>>(
     cwd: P,
     file: &FileMeta,
-    rules: &mut Rules,
+    rules: &Rules,
     tx: &Sender<Message>,
+    read_archives: bool,
 ) -> Result<bool> {
     let path = file
         .path()
@@ -35,6 +36,18 @@ pub fn check<P: AsRef<Path>>(
 
             if terminal {
                 break;
+            }
+        }
+
+        if read_archives {
+            if let Err(diag) = rule.check_archive(file) {
+                let terminal = diag.terminal;
+
+                diagnostics.push(diag);
+
+                if terminal {
+                    break;
+                }
             }
         }
     }

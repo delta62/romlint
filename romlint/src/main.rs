@@ -16,13 +16,10 @@ use commands::scan;
 use error::Result;
 use linter::Rules;
 use rules::{
-    ArchivedRomName, FilePermissions, MultifileArchive, NoArchives, NoLooseFiles, ObsoleteFormat,
+    ArchivedRomName, FilePermissions, MultifileArchive, NoLooseFiles, ObsoleteFormat,
     UncompressedFile, UnknownRom,
 };
-use std::{
-    sync::{mpsc, Arc, Mutex},
-    thread::spawn,
-};
+use std::{sync::mpsc, thread::spawn};
 use ui::Ui;
 
 #[tokio::main(flavor = "current_thread")]
@@ -46,21 +43,15 @@ async fn run(args: Args) -> Result<()> {
         db::load_all(&db_path, &tx).await?
     };
 
-    let mut rules: Rules = vec![
+    let rules: Rules = vec![
         Box::new(NoLooseFiles),
-        Box::new(NoArchives),
         Box::new(FilePermissions),
         Box::new(ObsoleteFormat),
         Box::new(UnknownRom::new(databases)),
         Box::new(UncompressedFile::default()),
         Box::new(MultifileArchive),
+        Box::new(ArchivedRomName),
     ];
-
-    if !args.no_archived_file_name {
-        rules.push(Box::new(ArchivedRomName));
-    }
-
-    let rules = Arc::new(Mutex::new(rules));
 
     scan(&args, &config, rules, tx.clone()).await?;
 

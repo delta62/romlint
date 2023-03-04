@@ -15,7 +15,7 @@ impl UnknownRom {
 }
 
 impl Rule for UnknownRom {
-    fn check(&mut self, file: &FileMeta) -> Result<(), Diagnostic> {
+    fn check(&self, file: &FileMeta) -> Result<(), Diagnostic> {
         let db = file
             .system()
             .and_then(|sys| self.databases.get(sys))
@@ -39,5 +39,9 @@ impl Rule for UnknownRom {
         }
 
         Err(Diagnostic::from_file(file, "Can't find this ROM in the database").with_hints(hints))
+    }
+
+    fn check_archive(&self, _file: &FileMeta) -> Result<(), Diagnostic> {
+        Ok(())
     }
 }

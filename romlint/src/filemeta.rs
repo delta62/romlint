@@ -19,8 +19,8 @@ impl ArchiveInfo {
         self.file_names.len()
     }
 
-    pub fn file_names(&self) -> impl Iterator<Item = &str> {
-        self.file_names.iter().map(|s| s.as_str())
+    pub fn file_names(&self) -> impl Iterator<Item = &Path> {
+        self.file_names.iter().map(|s| Path::new(s))
     }
 }
 

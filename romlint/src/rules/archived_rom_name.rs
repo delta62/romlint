@@ -8,7 +8,11 @@ impl Rule for ArchivedRomName {
         // For files which are not archived, this rule is not applicable
         if let Some(archive) = file.archive() {
             let archive_basename = file.basename().unwrap();
-            let contains_match = archive.file_names().any(|name| name == archive_basename);
+            let contains_match = archive.file_names().any(|name| {
+                name.file_stem()
+                    .map(|stem| stem == archive_basename)
+                    .unwrap_or(false)
+            });
 
             if contains_match {
                 return Ok(());

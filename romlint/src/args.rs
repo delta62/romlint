@@ -24,6 +24,9 @@ pub struct Args {
     /// checks but will result in a large performance boost.
     #[clap(long, default_value_t = false)]
     pub no_archive_checks: bool,
+
+    /// Only lint the given file
+    pub file: Option<String>,
 }
 
 impl Args {

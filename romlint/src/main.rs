@@ -12,21 +12,25 @@ mod word_match;
 
 use args::Args;
 use clap::Parser;
-use commands::scan;
-use error::Result;
+use commands::{check, scan};
+use error::{BrokenPipeErr, IoErr, Result};
+use filemeta::FileMeta;
 use linter::Rules;
 use rules::{
     ArchivedRomName, FilePermissions, MultifileArchive, NoLooseFiles, ObsoleteFormat,
     UncompressedFile, UnknownRom,
 };
+use snafu::ResultExt;
+use std::time::Instant;
 use std::{sync::mpsc, thread::spawn};
-use ui::Ui;
+use ui::{Message, Summary, Ui};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let args = Args::parse();
     if let Err(err) = run(args).await {
         eprintln!("{}", err);
+        std::process::exit(1);
     }
 }
 
@@ -53,7 +57,29 @@ async fn run(args: Args) -> Result<()> {
         Box::new(ArchivedRomName),
     ];
 
-    scan(&args, &config, rules, tx.clone()).await?;
+    if let Some(file) = args.file.as_ref() {
+        let start_time = Instant::now();
+        let mut summary = Summary::new(start_time);
+        let read_archives = !args.no_archive_checks;
+        let cwd = args.cwd();
+        let system = args.system.as_ref().map(|s| s.as_str());
+        let file = FileMeta::from_path(system, &config, file, read_archives)
+            .await
+            .context(IoErr { path: file })?;
+        let passed = check(cwd, &file, &rules, &tx, read_archives)?;
+
+        if passed {
+            summary.add_success(system.unwrap());
+        } else {
+            summary.add_failure(system.unwrap());
+        }
+
+        summary.mark_ended();
+        tx.send(Message::Finished(summary))
+            .context(BrokenPipeErr {})?;
+    } else {
+        scan(&args, &config, rules, tx.clone()).await?;
+    }
 
     ui_thread.join().unwrap()?;
 

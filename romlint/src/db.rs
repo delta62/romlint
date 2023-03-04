@@ -23,6 +23,13 @@ impl Database {
         Ok(Self(datafile))
     }
 
+    pub fn dump(&self) {
+        self.0
+            .games
+            .iter()
+            .for_each(|game| println!("{}", game.name));
+    }
+
     pub fn contains(&self, file: &str) -> bool {
         self.0.games.iter().any(|game| game.name.as_str() == file)
     }

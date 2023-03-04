@@ -27,6 +27,10 @@ pub struct Args {
 
     /// Only lint the given file
     pub file: Option<String>,
+
+    /// Dump all known ROM names to stdout, separated by newlines
+    #[clap(short, long)]
+    pub dump_system: Option<String>,
 }
 
 impl Args {

@@ -129,7 +129,11 @@ fn print_loading_status(items: &[(String, bool)]) {
     move_up_lines(items.len()).unwrap();
     for (system_name, is_loading) in items {
         let done_text = if *is_loading { "" } else { "✓" };
-        println!("Loading {} roms... {}", system_name, Green.paint(done_text));
+        println!(
+            "Loading {} rom db... {}",
+            system_name,
+            Green.paint(done_text)
+        );
     }
 }
 

@@ -38,8 +38,15 @@ async fn run(args: Args) -> Result<()> {
     let config_path = args.config_path();
     let config = config::from_path(config_path).await?;
     let db_path = args.config_dir()?.join(config.db_dir());
-
     let (tx, rx) = mpsc::channel();
+
+    if let Some(sys) = args.dump_system {
+        let sys = sys.as_str();
+        let database = db::load_only(&db_path, &[sys], &tx).await?;
+        database.get(sys).unwrap().dump();
+        return Ok(());
+    }
+
     let ui_thread = spawn(move || Ui::new(rx).run());
     let databases = if let Some(sys) = &args.system {
         db::load_only(&db_path, &[sys.as_str()], &tx).await?

@@ -69,11 +69,15 @@ pub enum Message {
 
 pub struct Ui {
     channel: Receiver<Message>,
+    show_passes: bool,
 }
 
 impl Ui {
-    pub fn new(channel: Receiver<Message>) -> Self {
-        Self { channel }
+    pub fn new(channel: Receiver<Message>, show_passes: bool) -> Self {
+        Self {
+            channel,
+            show_passes,
+        }
     }
 
     pub fn run(self) -> Result<()> {
@@ -104,7 +108,7 @@ impl Ui {
                     Message::SetStatus(s) => status = s,
                     Message::Report(report) => {
                         move_to_line_start().context(IoErr { path: "stdout" })?;
-                        print_report(&report);
+                        print_report(&report, self.show_passes);
                     }
                 }
             }
@@ -174,9 +178,11 @@ fn format_duration(duration: &Duration) -> String {
     }
 }
 
-fn print_report(report: &Report) {
+fn print_report(report: &Report, show_passes: bool) {
     if report.ok() {
-        println!("{}", Green.paint(format!(" {}", report.path.as_str())));
+        if show_passes {
+            println!("{}", Green.paint(format!(" {}", report.path.as_str())));
+        }
     } else {
         println!("{}", Red.paint(format!("❌ {}", report.path.as_str())));
         for (i, diag) in report.diagnostics.iter().enumerate() {

@@ -31,6 +31,10 @@ pub struct Args {
     /// Dump all known ROM names to stdout, separated by newlines
     #[clap(short, long)]
     pub dump_system: Option<String>,
+
+    /// Whether or not to show files which pass lint checks
+    #[clap(long, default_value_t = false)]
+    pub hide_passes: bool,
 }
 
 impl Args {

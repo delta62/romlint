@@ -47,7 +47,7 @@ async fn run(args: Args) -> Result<()> {
         return Ok(());
     }
 
-    let ui_thread = spawn(move || Ui::new(rx).run());
+    let ui_thread = spawn(move || Ui::new(rx, !args.hide_passes).run());
     let databases = if let Some(sys) = &args.system {
         db::load_only(&db_path, &[sys.as_str()], &tx).await?
     } else {

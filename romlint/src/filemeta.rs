@@ -27,6 +27,7 @@ impl ArchiveInfo {
 
 pub struct FileMeta<'a> {
     archive: Option<ArchiveInfo>,
+    is_archived: bool,
     config: Option<ResolvedConfig<'a>>,
     depth: usize,
     forced_system: Option<&'a str>,
@@ -54,38 +55,44 @@ impl<'a> FileMeta<'a> {
         let meta = metadata(path.as_path()).await?;
         let extension = path.extension().and_then(|os| os.to_str());
         let mut archive = None;
+        let mut is_archived = false;
 
-        if let Some("zip") = extension {
-            if read_archives {
-                let path = path.clone();
-                let info = spawn_blocking(|| -> Result<Option<ArchiveInfo>> {
-                    let file = File::open(path)?;
-                    let reader = BufReader::new(file);
-                    let mut zip = ZipArchive::new(reader).unwrap();
-                    let mut uncompressed_size = 0;
-                    let mut compressed_size = 0;
-                    let mut file_names = Vec::with_capacity(zip.len());
+        match extension {
+            Some("zip") => {
+                if read_archives {
+                    let path = path.clone();
+                    let info = spawn_blocking(|| -> Result<Option<ArchiveInfo>> {
+                        let file = File::open(path)?;
+                        let reader = BufReader::new(file);
+                        let mut zip = ZipArchive::new(reader).unwrap();
+                        let mut uncompressed_size = 0;
+                        let mut compressed_size = 0;
+                        let mut file_names = Vec::with_capacity(zip.len());
 
-                    for i in 0..zip.len() {
-                        let file = zip.by_index_raw(i).unwrap();
-                        uncompressed_size += file.size();
-                        compressed_size += file.compressed_size();
-                        file_names.push(file.name().to_string());
-                    }
+                        for i in 0..zip.len() {
+                            let file = zip.by_index_raw(i).unwrap();
+                            uncompressed_size += file.size();
+                            compressed_size += file.compressed_size();
+                            file_names.push(file.name().to_string());
+                        }
 
-                    Ok(Some(ArchiveInfo {
-                        file_names,
-                        uncompressed_size,
-                        compressed_size,
-                    }))
-                })
-                .await??;
-                archive = info;
+                        Ok(Some(ArchiveInfo {
+                            file_names,
+                            uncompressed_size,
+                            compressed_size,
+                        }))
+                    })
+                    .await??;
+                    archive = info;
+                }
             }
-        };
+            Some("rvz") => is_archived = true,
+            _ => {}
+        }
 
         Ok(Self {
             archive,
+            is_archived,
             config,
             depth: 1,
             forced_system: system,
@@ -105,44 +112,57 @@ impl<'a> FileMeta<'a> {
             .and_then(|sys| config.resolve(sys));
         let extension = file.path.extension().and_then(|os| os.to_str());
         let mut archive = None;
+        let mut is_archived = false;
 
-        if let Some("zip") = extension {
-            if read_archives {
-                let path = file.path.clone();
-                let info = spawn_blocking(|| -> Result<Option<ArchiveInfo>> {
-                    let file = File::open(path)?;
-                    let reader = BufReader::new(file);
-                    let mut zip = ZipArchive::new(reader).unwrap();
-                    let mut uncompressed_size = 0;
-                    let mut compressed_size = 0;
-                    let mut file_names = Vec::with_capacity(zip.len());
+        match extension {
+            Some("zip") => {
+                is_archived = true;
+                if read_archives {
+                    let path = file.path.clone();
+                    let info = spawn_blocking(|| -> Result<Option<ArchiveInfo>> {
+                        let file = File::open(path)?;
+                        let reader = BufReader::new(file);
+                        let mut zip = ZipArchive::new(reader).unwrap();
+                        let mut uncompressed_size = 0;
+                        let mut compressed_size = 0;
+                        let mut file_names = Vec::with_capacity(zip.len());
 
-                    for i in 0..zip.len() {
-                        let file = zip.by_index_raw(i).unwrap();
-                        uncompressed_size += file.size();
-                        compressed_size += file.compressed_size();
-                        file_names.push(file.name().to_string());
-                    }
+                        for i in 0..zip.len() {
+                            let file = zip.by_index_raw(i).unwrap();
+                            uncompressed_size += file.size();
+                            compressed_size += file.compressed_size();
+                            file_names.push(file.name().to_string());
+                        }
 
-                    Ok(Some(ArchiveInfo {
-                        file_names,
-                        uncompressed_size,
-                        compressed_size,
-                    }))
-                })
-                .await??;
-                archive = info;
+                        Ok(Some(ArchiveInfo {
+                            file_names,
+                            uncompressed_size,
+                            compressed_size,
+                        }))
+                    })
+                    .await??;
+                    archive = info;
+                }
             }
-        };
+            Some("rvz") => {
+                is_archived = true;
+            }
+            _ => {}
+        }
 
         Ok(Self {
             archive,
+            is_archived,
             config,
             depth: file.depth,
             forced_system: system,
             meta: file.meta,
             path: file.path,
         })
+    }
+
+    pub fn is_archived(&self) -> bool {
+        self.is_archived
     }
 
     pub fn config(&self) -> Option<&ResolvedConfig> {

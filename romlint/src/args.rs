@@ -32,6 +32,9 @@ pub struct Args {
     #[clap(short, long)]
     pub dump_system: Option<String>,
 
+    #[clap(long, default_value_t = false)]
+    pub inventory: bool,
+
     /// Whether or not to show files which pass lint checks
     #[clap(long, default_value_t = false)]
     pub hide_passes: bool,

@@ -40,6 +40,11 @@ async fn run(args: Args) -> Result<()> {
     let db_path = args.config_dir()?.join(config.db_dir());
     let (tx, rx) = mpsc::channel();
 
+    if args.inventory {
+        println!("Do some inventory");
+        return Ok(());
+    }
+
     if let Some(sys) = args.dump_system {
         let sys = sys.as_str();
         let database = db::load_only(&db_path, &[sys], &tx).await?;

@@ -2,21 +2,13 @@ requires = { "stat" }
 
 function lint(file, api)
     local stat = file.stat()
-    local assert = api.assert
+    local assert_eq = api.assert_eq
 
     if stat.is_dir then
-        assert(
-            "mode",
-            stat.mode == 0755,
-            "incorrect permissions",
-            "directories must have mode 755"
-        )
+        -- Octal 755
+        assert_eq(493, stat.mode, "directories must have mode 755")
     elseif stat.is_file then
-        assert(
-            "mode",
-            stat.mode == 0644,
-            "incorrect permissions",
-            "files must have mode 644"
-        )
+        -- Octal 644
+        assert_eq(420, stat.mode, "files must have mode 644")
     end
 end

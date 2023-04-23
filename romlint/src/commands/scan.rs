@@ -27,7 +27,7 @@ pub async fn scan(args: &Args, config: &Config, rules: Rules, tx: Sender<Message
 
     while let Some(file) = stream.try_next().await.context(IoErr { path })? {
         let system = file.system().unwrap_or("unknown");
-        let pass = check(path, &file, &rules, &tx, read_archives)?;
+        let pass = check(path, &file, &rules, &tx, read_archives).await?;
 
         if pass {
             summary.add_success(system);

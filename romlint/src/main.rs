@@ -28,6 +28,7 @@ use ui::{Message, Summary, Ui};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    env_logger::init();
     let args = Args::parse();
     if let Err(err) = run(args).await {
         eprintln!("{}", err);
@@ -79,7 +80,7 @@ async fn run(args: Args) -> Result<()> {
         let file = FileMeta::from_path(system, &config, file, read_archives)
             .await
             .context(IoErr { path: file })?;
-        let passed = check(cwd, &file, &rules, &tx, read_archives)?;
+        let passed = check(cwd, &file, &rules, &tx, read_archives).await?;
 
         if passed {
             summary.add_success(system.unwrap());

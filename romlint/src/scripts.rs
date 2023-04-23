@@ -1,57 +1,15 @@
+use crate::filemeta::FileMeta;
 use bitflags::bitflags;
 use futures::io;
 use rlua::{Function, Lua, StdLib, ToLua, Value};
 use std::{fs::Metadata, os::unix::prelude::MetadataExt, path::Path, sync::Arc};
 use tokio::fs::read_to_string;
 
-use crate::filemeta::FileMeta;
-
-bitflags! {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    struct Requirements: u32 {
-        const PATH = 0b0001;
-        const STAT = 0b0010;
-    }
-}
-
-impl Requirements {
-    pub fn to_str(&self) -> &'static str {
-        match self {
-            &Self::PATH => "path",
-            &Self::STAT => "stat",
-            _ => "multiple requirements",
-        }
-    }
-}
-
-struct Stat {
-    is_dir: bool,
-    is_file: bool,
-    mode: u32,
-}
-
-impl<'lua> ToLua<'lua> for Stat {
-    fn to_lua(self, lua: rlua::Context<'lua>) -> rlua::Result<rlua::Value<'lua>> {
-        let table = lua.create_table()?;
-        table.set("mode", self.mode & 0o777)?;
-        table.set("is_dir", self.is_dir)?;
-        table.set("is_file", self.is_file)?;
-
-        Ok(rlua::Value::Table(table))
-    }
-}
-
-struct Script {
-    requirements: Requirements,
-    src: String,
-    name: String,
-}
-
-pub struct ScriptHost {
+pub struct ScriptLoader {
     scripts: Vec<Script>,
 }
 
-impl ScriptHost {
+impl ScriptLoader {
     pub fn new() -> Self {
         let scripts = vec![];
         Self { scripts }
@@ -98,51 +56,105 @@ impl ScriptHost {
         })
     }
 
-    pub fn exec_all<'a>(&'a self, meta: &'a FileMeta) -> rlua::Result<()> {
-        log::debug!("Executing lints for {:?}", meta.path());
-        let lua = Lua::new_with(StdLib::BASE | StdLib::TABLE | StdLib::STRING);
+    pub fn iter(&self) -> impl Iterator<Item = &Script> {
+        self.scripts.iter()
+    }
+}
 
-        lua.context(|ctx| {
-            ctx.scope(|scope| {
-                let script = self.scripts.first().unwrap();
+bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct Requirements: u32 {
+        const PATH = 0b0001;
+        const STAT = 0b0010;
+    }
+}
 
-                let globals = ctx.globals();
-                let file = ctx.create_table()?;
-                let api = ctx.create_table()?;
+impl Requirements {
+    pub fn to_str(&self) -> &'static str {
+        match self {
+            &Self::PATH => "path",
+            &Self::STAT => "stat",
+            _ => "multiple requirements",
+        }
+    }
+}
 
-                let assert_eq = ctx.create_function(
-                    |_, (expected, actual, detail): (Value, Value, Option<String>)| {
-                        if lua_eq(&expected, &actual) {
-                            return Ok(());
-                        }
+struct Stat {
+    is_dir: bool,
+    is_file: bool,
+    mode: u32,
+}
 
-                        let err = AssertionError::new(&expected, &actual, detail);
-                        let err = rlua::Error::ExternalError(Arc::new(err));
-                        Err(err)
-                    },
-                )?;
+impl<'lua> ToLua<'lua> for Stat {
+    fn to_lua(self, lua: rlua::Context<'lua>) -> rlua::Result<rlua::Value<'lua>> {
+        let table = lua.create_table()?;
+        table.set("mode", self.mode & 0o777)?;
+        table.set("is_dir", self.is_dir)?;
+        table.set("is_file", self.is_file)?;
 
-                api.set("assert_eq", assert_eq)?;
+        Ok(rlua::Value::Table(table))
+    }
+}
 
-                let stat = scope.create_function(|_, ()| {
-                    if !script.requirements.contains(Requirements::STAT) {
-                        let err = RequirementError::new(Requirements::STAT);
-                        let err = rlua::Error::ExternalError(Arc::new(err));
-                        Err(err)?;
+pub struct Script {
+    requirements: Requirements,
+    src: String,
+    name: String,
+}
+
+// pub fn exec_all<'a>(
+//     lints: impl Iterator<Item = &'a Script>,
+//     meta: &'a FileMeta,
+// ) -> rlua::Result<()> {
+//     log::debug!("Executing lints for {:?}", meta.path());
+//
+//     for lint in lints {
+//         exec_one(lint, meta)?;
+//     }
+//
+//     Ok(())
+// }
+
+pub fn exec_one(script: &Script, meta: &FileMeta) -> rlua::Result<()> {
+    let lua = Lua::new_with(StdLib::BASE | StdLib::TABLE | StdLib::STRING);
+
+    lua.context(|ctx| {
+        ctx.scope(|scope| {
+            let globals = ctx.globals();
+            let file = ctx.create_table()?;
+            let api = ctx.create_table()?;
+
+            let assert_eq = ctx.create_function(
+                |_, (expected, actual, detail): (Value, Value, Option<String>)| {
+                    if lua_eq(&expected, &actual) {
+                        return Ok(());
                     }
 
-                    let stat: Stat = meta.metadata().into();
-                    Ok(stat)
-                })?;
+                    let err = AssertionError::new(&expected, &actual, detail);
+                    let err = rlua::Error::ExternalError(Arc::new(err));
+                    Err(err)
+                },
+            )?;
 
-                file.set("stat", stat)?;
+            api.set("assert_eq", assert_eq)?;
 
-                ctx.load(&script.src).set_name(&script.name)?.exec()?;
-                let lint: Function = globals.get("lint")?;
-                lint.call((file, api))
-            })
+            let stat = scope.create_function(|_, ()| {
+                if !script.requirements.contains(Requirements::STAT) {
+                    let err = RequirementError::new(Requirements::STAT);
+                    let err = rlua::Error::ExternalError(Arc::new(err));
+                    Err(err)?;
+                }
+
+                let stat: Stat = meta.metadata().into();
+                Ok(stat)
+            })?;
+
+            file.set("stat", stat)?;
+
+            ctx.load(&script.src).set_name(&script.name)?.exec()?;
+            globals.get::<&str, Function>("lint")?.call((file, api))
         })
-    }
+    })
 }
 
 impl<'a> From<&'a Metadata> for Stat {

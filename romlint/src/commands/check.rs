@@ -1,5 +1,5 @@
-use crate::linter::Rules;
-use crate::scripts::ScriptHost;
+use crate::linter::Diagnostic;
+use crate::scripts::{exec_one, ScriptLoader};
 use crate::{
     error::{BrokenPipeErr, Result},
     filemeta::FileMeta,
@@ -9,13 +9,14 @@ use snafu::prelude::*;
 use std::path::Path;
 use std::sync::mpsc::Sender;
 
-pub async fn check<P: AsRef<Path>>(
+pub fn check<P: AsRef<Path>>(
     cwd: P,
     file: &FileMeta<'_>,
-    rules: &Rules,
+    script_loader: &ScriptLoader,
     tx: &Sender<Message>,
-    read_archives: bool,
 ) -> Result<bool> {
+    use rlua::Error::*;
+
     let path = file
         .path()
         .strip_prefix(cwd)
@@ -28,41 +29,24 @@ pub async fn check<P: AsRef<Path>>(
         .context(BrokenPipeErr {})?;
 
     let mut diagnostics = Vec::new();
-    let mut script_host = ScriptHost::new();
 
-    script_host.load("lints/file_mode.lua").await.unwrap();
-    if let Err(err) = script_host.exec_all(file) {
-        match err {
-            rlua::Error::CallbackError { traceback, cause } => {
-                log::error!("{cause} - {traceback}");
+    for lint in script_loader.iter() {
+        if let Err(err) = exec_one(lint, file) {
+            let message;
+
+            match err {
+                CallbackError { traceback, cause } => {
+                    message = format!("{cause} - {traceback}");
+                }
+                err => {
+                    message = format!("{err}");
+                }
             }
-            err => log::error!("{err}"),
+
+            let diag = Diagnostic::from_file(file, message);
+            diagnostics.push(diag);
         }
     }
-
-    // for rule in rules {
-    //     if let Err(diag) = rule.check(file) {
-    //         let terminal = diag.terminal;
-
-    //         diagnostics.push(diag);
-
-    //         if terminal {
-    //             break;
-    //         }
-    //     }
-
-    //     if read_archives {
-    //         if let Err(diag) = rule.check_archive(file) {
-    //             let terminal = diag.terminal;
-
-    //             diagnostics.push(diag);
-
-    //             if terminal {
-    //                 break;
-    //             }
-    //         }
-    //     }
-    // }
 
     let passed = diagnostics.is_empty();
     let report = Report { diagnostics, path };

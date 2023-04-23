@@ -3,7 +3,7 @@ use crate::args::Args;
 use crate::config::Config;
 use crate::error::{BrokenPipeErr, IoErr};
 use crate::filemeta::FileMeta;
-use crate::linter::Rules;
+use crate::scripts::ScriptLoader;
 use crate::ui::{Message, Summary};
 use crate::Result;
 use dir_walker::walk;
@@ -12,7 +12,12 @@ use snafu::prelude::*;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
-pub async fn scan(args: &Args, config: &Config, rules: Rules, tx: Sender<Message>) -> Result<()> {
+pub async fn scan(
+    args: &Args,
+    config: &Config,
+    script_loader: &ScriptLoader,
+    tx: Sender<Message>,
+) -> Result<()> {
     let start_time = Instant::now();
     let mut summary = Summary::new(start_time);
     let cwd = args.cwd();
@@ -27,7 +32,7 @@ pub async fn scan(args: &Args, config: &Config, rules: Rules, tx: Sender<Message
 
     while let Some(file) = stream.try_next().await.context(IoErr { path })? {
         let system = file.system().unwrap_or("unknown");
-        let pass = check(path, &file, &rules, &tx, read_archives).await?;
+        let pass = check(path, &file, &script_loader, &tx)?;
 
         if pass {
             summary.add_success(system);

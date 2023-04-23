@@ -6,7 +6,6 @@ mod db;
 mod error;
 mod filemeta;
 mod linter;
-mod rules;
 mod scripts;
 mod ui;
 mod word_match;
@@ -16,14 +15,11 @@ use clap::Parser;
 use commands::{check, scan};
 use error::{BrokenPipeErr, IoErr, Result};
 use filemeta::FileMeta;
-use linter::Rules;
-use rules::{
-    ArchivedRomName, FilePermissions, MultifileArchive, NoLooseFiles, ObsoleteFormat,
-    UncompressedFile, UnknownRom,
-};
+use scripts::ScriptLoader;
 use snafu::ResultExt;
 use std::time::Instant;
 use std::{sync::mpsc, thread::spawn};
+use tokio::fs::read_dir;
 use ui::{Message, Summary, Ui};
 
 #[tokio::main(flavor = "current_thread")]
@@ -41,11 +37,7 @@ async fn run(args: Args) -> Result<()> {
     let config = config::from_path(config_path).await?;
     let db_path = args.config_dir()?.join(config.db_dir());
     let (tx, rx) = mpsc::channel();
-
-    if args.inventory {
-        println!("Do some inventory");
-        return Ok(());
-    }
+    let mut script_loader = ScriptLoader::new();
 
     if let Some(sys) = args.dump_system {
         let sys = sys.as_str();
@@ -54,22 +46,17 @@ async fn run(args: Args) -> Result<()> {
         return Ok(());
     }
 
-    let ui_thread = spawn(move || Ui::new(rx, !args.hide_passes).run());
-    let databases = if let Some(sys) = &args.system {
-        db::load_only(&db_path, &[sys.as_str()], &tx).await?
-    } else {
-        db::load_all(&db_path, &tx).await?
-    };
+    let mut dir = read_dir("./lints").await.unwrap();
+    while let Ok(Some(file)) = dir.next_entry().await {
+        script_loader.load(file.path()).await.unwrap();
+    }
 
-    let rules: Rules = vec![
-        Box::new(NoLooseFiles),
-        Box::new(FilePermissions),
-        Box::new(ObsoleteFormat),
-        Box::new(UnknownRom::new(databases)),
-        Box::new(UncompressedFile::default()),
-        Box::new(MultifileArchive),
-        Box::new(ArchivedRomName),
-    ];
+    let ui_thread = spawn(move || Ui::new(rx, !args.hide_passes).run());
+    // let databases = if let Some(sys) = &args.system {
+    //     db::load_only(&db_path, &[sys.as_str()], &tx).await?
+    // } else {
+    //     db::load_all(&db_path, &tx).await?
+    // };
 
     if let Some(file) = args.file.as_ref() {
         let start_time = Instant::now();
@@ -80,7 +67,7 @@ async fn run(args: Args) -> Result<()> {
         let file = FileMeta::from_path(system, &config, file, read_archives)
             .await
             .context(IoErr { path: file })?;
-        let passed = check(cwd, &file, &rules, &tx, read_archives).await?;
+        let passed = check(cwd, &file, &script_loader, &tx)?;
 
         if passed {
             summary.add_success(system.unwrap());
@@ -92,7 +79,7 @@ async fn run(args: Args) -> Result<()> {
         tx.send(Message::Finished(summary))
             .context(BrokenPipeErr {})?;
     } else {
-        scan(&args, &config, rules, tx.clone()).await?;
+        scan(&args, &config, &script_loader, tx.clone()).await?;
     }
 
     ui_thread.join().unwrap()?;

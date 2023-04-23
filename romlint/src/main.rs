@@ -7,6 +7,7 @@ mod error;
 mod filemeta;
 mod linter;
 mod rules;
+mod scripts;
 mod ui;
 mod word_match;
 

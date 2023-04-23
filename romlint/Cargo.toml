@@ -4,11 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bitflags = "2.1.0"
 clap = { version = "4.1.6", features = ["derive"] }
 dir_walker = { path = "../dir_walker" }
+env_logger = "0.10.0"
 futures = "0.3.26"
+log = "0.4.17"
 no_intro = { path = "../no_intro" }
 nu-ansi-term = "0.46.0"
+rlua = "0.19.4"
 serde = { version = "1.0.152", features = ["derive"] }
 snafu = "0.7.4"
 tokio = { version = "1.25.0", features = ["macros", "rt", "fs", "io-util"] }

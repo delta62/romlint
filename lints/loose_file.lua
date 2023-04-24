@@ -21,6 +21,6 @@ function lint(file, api)
         api.config.archive_format
     )
 
-    local msg = string.format("%s is not an allowed extension", ext)
+    local msg = string.format("unknown extension '%s'", ext)
     api.assert_contains(allowed, ext, msg)
 end

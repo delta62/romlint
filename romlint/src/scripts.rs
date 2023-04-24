@@ -1,7 +1,7 @@
-use crate::filemeta::FileMeta;
+use crate::filemeta::{ArchiveInfo, FileMeta};
 use bitflags::bitflags;
 use futures::io;
-use rlua::{Function, Lua, StdLib, ToLua, Value};
+use rlua::{Function, Lua, StdLib, Table, ToLua, Value};
 use std::{fs::Metadata, os::unix::prelude::MetadataExt, path::Path as FsPath, sync::Arc};
 use tokio::fs::read_to_string;
 
@@ -46,6 +46,7 @@ impl ScriptLoader {
                 .fold(Requirements::empty(), |acc, r| match r.as_str() {
                     "stat" => acc | Requirements::STAT,
                     "path" => acc | Requirements::PATH,
+                    "archive" => acc | Requirements::ARCHIVE,
                     s => {
                         log::warn!("Unknown requirement listed: '{s}'");
                         acc
@@ -64,8 +65,9 @@ impl ScriptLoader {
 bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     struct Requirements: u32 {
-        const PATH = 0b0001;
-        const STAT = 0b0010;
+        const PATH    = 0b0001;
+        const STAT    = 0b0010;
+        const ARCHIVE = 0b0100;
     }
 }
 
@@ -74,6 +76,7 @@ impl Requirements {
         match self {
             &Self::PATH => "path",
             &Self::STAT => "stat",
+            &Self::ARCHIVE => "archive",
             _ => "multiple requirements",
         }
     }
@@ -192,10 +195,49 @@ pub fn exec_one(script: &Script, meta: &FileMeta) -> rlua::Result<()> {
 
             file.set("path", path)?;
 
+            let archive = scope.create_function(|_, ()| {
+                if !script.requirements.contains(Requirements::ARCHIVE) {
+                    let err = RequirementError::new(Requirements::ARCHIVE);
+                    let err = rlua::Error::ExternalError(Arc::new(err));
+                    Err(err)?;
+                }
+
+                let archive: Archive = meta.archive().into();
+                Ok(archive)
+            })?;
+
+            file.set("archive", archive)?;
+
             ctx.load(&script.src).set_name(&script.name)?.exec()?;
             globals.get::<&str, Function>("lint")?.call((file, api))
         })
     })
+}
+
+struct Archive {
+    files: Option<Vec<String>>,
+}
+
+impl<'lua> ToLua<'lua> for Archive {
+    fn to_lua(self, lua: rlua::Context<'lua>) -> rlua::Result<Value<'lua>> {
+        let table = lua.create_table()?;
+
+        table.set("files", self.files)?;
+
+        Ok(Value::Table(table))
+    }
+}
+
+impl From<Option<&ArchiveInfo>> for Archive {
+    fn from(value: Option<&ArchiveInfo>) -> Self {
+        let files = value.map(|a| {
+            a.file_names()
+                .map(|path| path.to_str().unwrap_or("").to_string())
+                .collect()
+        });
+
+        Self { files }
+    }
 }
 
 struct Path {
@@ -277,12 +319,8 @@ impl AssertionError {
     pub fn expected(expected: &Value, actual: &Value, detail: Option<String>) -> Self {
         let expected = fmt_lua(&expected);
         let actual = fmt_lua(&actual);
-        let detail = detail
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or("assertion error");
+        let message = detail.unwrap_or_else(|| format!("expected {expected} to equal {actual}"));
 
-        let message = format!("{detail} - expected {expected} to equal {actual}");
         Self { message }
     }
 

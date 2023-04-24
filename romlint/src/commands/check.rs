@@ -32,16 +32,10 @@ pub fn check<P: AsRef<Path>>(
 
     for lint in script_loader.iter() {
         if let Err(err) = exec_one(lint, file) {
-            let message;
-
-            match err {
-                CallbackError { traceback, cause } => {
-                    message = format!("{cause} - {traceback}");
-                }
-                err => {
-                    message = format!("{err}");
-                }
-            }
+            let message = match err {
+                CallbackError { cause, .. } => format!("{cause}"),
+                err => format!("{err}"),
+            };
 
             let diag = Diagnostic::from_file(file, message);
             diagnostics.push(diag);

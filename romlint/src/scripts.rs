@@ -2,7 +2,7 @@ use crate::filemeta::FileMeta;
 use bitflags::bitflags;
 use futures::io;
 use rlua::{Function, Lua, StdLib, ToLua, Value};
-use std::{fs::Metadata, os::unix::prelude::MetadataExt, path::Path, sync::Arc};
+use std::{fs::Metadata, os::unix::prelude::MetadataExt, path::Path as FsPath, sync::Arc};
 use tokio::fs::read_to_string;
 
 pub struct ScriptLoader {
@@ -15,7 +15,7 @@ impl ScriptLoader {
         Self { scripts }
     }
 
-    pub async fn load<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
+    pub async fn load<P: AsRef<FsPath>>(&mut self, path: P) -> io::Result<()> {
         let src = read_to_string(&path).await?;
         let name = path
             .as_ref()
@@ -102,19 +102,6 @@ pub struct Script {
     name: String,
 }
 
-// pub fn exec_all<'a>(
-//     lints: impl Iterator<Item = &'a Script>,
-//     meta: &'a FileMeta,
-// ) -> rlua::Result<()> {
-//     log::debug!("Executing lints for {:?}", meta.path());
-//
-//     for lint in lints {
-//         exec_one(lint, meta)?;
-//     }
-//
-//     Ok(())
-// }
-
 pub fn exec_one(script: &Script, meta: &FileMeta) -> rlua::Result<()> {
     let lua = Lua::new_with(StdLib::BASE | StdLib::TABLE | StdLib::STRING);
 
@@ -130,13 +117,54 @@ pub fn exec_one(script: &Script, meta: &FileMeta) -> rlua::Result<()> {
                         return Ok(());
                     }
 
-                    let err = AssertionError::new(&expected, &actual, detail);
+                    let err = AssertionError::expected(&expected, &actual, detail);
+                    let err = rlua::Error::ExternalError(Arc::new(err));
+                    Err(err)
+                },
+            )?;
+
+            let assert_ne = ctx.create_function(
+                |_, (not_expected, actual, detail): (Value, Value, Option<String>)| {
+                    if lua_eq(&not_expected, &actual) {
+                        let err = AssertionError::unexpected(&not_expected, detail);
+                        let err = rlua::Error::ExternalError(Arc::new(err));
+                        Err(err)?
+                    }
+
+                    Ok(())
+                },
+            )?;
+
+            let throw = ctx.create_function(|_, detail: String| -> rlua::Result<()> {
+                let err = AssertionError::throw(detail);
+                let err = rlua::Error::ExternalError(Arc::new(err));
+                Err(err)
+            })?;
+
+            let assert_contains = ctx.create_function(
+                |_, (haystack, needle, detail): (Vec<Value>, Value, Option<String>)| {
+                    for item in haystack {
+                        if lua_eq(&item, &needle) {
+                            return Ok(());
+                        }
+                    }
+
+                    let detail = detail.unwrap_or_else(|| {
+                        format!("Couldn't find '{}' in collection", fmt_lua(&needle),)
+                    });
+
+                    let err = AssertionError::with_message(detail);
                     let err = rlua::Error::ExternalError(Arc::new(err));
                     Err(err)
                 },
             )?;
 
             api.set("assert_eq", assert_eq)?;
+            api.set("assert_ne", assert_ne)?;
+            api.set("assert_contains", assert_contains)?;
+            api.set("throw", throw)?;
+            api.set("system", meta.system())?;
+            api.set("config", meta.config())?;
 
             let stat = scope.create_function(|_, ()| {
                 if !script.requirements.contains(Requirements::STAT) {
@@ -151,10 +179,60 @@ pub fn exec_one(script: &Script, meta: &FileMeta) -> rlua::Result<()> {
 
             file.set("stat", stat)?;
 
+            let path = scope.create_function(|_, ()| {
+                if !script.requirements.contains(Requirements::PATH) {
+                    let err = RequirementError::new(Requirements::PATH);
+                    let err = rlua::Error::ExternalError(Arc::new(err));
+                    Err(err)?;
+                }
+
+                let path: Path = meta.path().into();
+                Ok(path)
+            })?;
+
+            file.set("path", path)?;
+
             ctx.load(&script.src).set_name(&script.name)?.exec()?;
             globals.get::<&str, Function>("lint")?.call((file, api))
         })
     })
+}
+
+struct Path {
+    extension: Option<String>,
+    stem: Option<String>,
+    path: String,
+}
+
+impl<'lua> ToLua<'lua> for Path {
+    fn to_lua(self, lua: rlua::Context<'lua>) -> rlua::Result<Value<'lua>> {
+        let table = lua.create_table()?;
+
+        table.set("extension", self.extension)?;
+        table.set("stem", self.stem)?;
+        table.set("path", self.path)?;
+
+        Ok(rlua::Value::Table(table))
+    }
+}
+
+impl From<&FsPath> for Path {
+    fn from(value: &FsPath) -> Self {
+        Self {
+            extension: value
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|s| s.to_string()),
+            stem: value
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .map(|stem| stem.to_string()),
+            path: value
+                .to_str()
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| String::new()),
+        }
+    }
 }
 
 impl<'a> From<&'a Metadata> for Stat {
@@ -196,7 +274,7 @@ struct AssertionError {
 }
 
 impl AssertionError {
-    pub fn new(expected: &Value, actual: &Value, detail: Option<String>) -> Self {
+    pub fn expected(expected: &Value, actual: &Value, detail: Option<String>) -> Self {
         let expected = fmt_lua(&expected);
         let actual = fmt_lua(&actual);
         let detail = detail
@@ -205,6 +283,27 @@ impl AssertionError {
             .unwrap_or("assertion error");
 
         let message = format!("{detail} - expected {expected} to equal {actual}");
+        Self { message }
+    }
+
+    pub fn unexpected(unexpected: &Value, detail: Option<String>) -> Self {
+        let unexpected = fmt_lua(&unexpected);
+        let detail = detail
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or("assertion error");
+
+        let message = format!("{detail} - unexpected value '{unexpected}'");
+        Self { message }
+    }
+
+    pub fn throw<S: Into<String>>(message: S) -> Self {
+        let message = message.into();
+        Self { message }
+    }
+
+    pub fn with_message<S: Into<String>>(message: S) -> Self {
+        let message = message.into();
         Self { message }
     }
 }

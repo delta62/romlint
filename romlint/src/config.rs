@@ -1,4 +1,5 @@
 use crate::error::{ConfigReadErr, IoErr, Result};
+use rlua::ToLua;
 use serde::{
     de::{self, value::SeqAccessDeserializer, Visitor},
     Deserialize, Deserializer,
@@ -58,6 +59,20 @@ pub struct ResolvedConfig<'a> {
     pub archive_format: Vec<&'a str>,
     pub obsolete_formats: Option<Vec<&'a str>>,
     pub raw_format: Vec<&'a str>,
+}
+
+impl<'cfg, 'lua> ToLua<'lua> for &ResolvedConfig<'cfg> {
+    fn to_lua(self, lua: rlua::Context<'lua>) -> rlua::Result<rlua::Value<'lua>> {
+        let table = lua.create_table()?;
+        table.set("archive_format", self.archive_format.clone())?;
+        table.set(
+            "obsolete_formats",
+            self.obsolete_formats.clone().unwrap_or_else(|| vec![]),
+        )?;
+        table.set("raw_format", self.raw_format.clone())?;
+
+        Ok(rlua::Value::Table(table))
+    }
 }
 
 fn string_or_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>

@@ -1,8 +1,15 @@
-use crate::filemeta::{ArchiveInfo, FileMeta};
+use crate::{
+    db::Database,
+    filemeta::{ArchiveInfo, FileMeta},
+    word_match::Tokens,
+};
 use bitflags::bitflags;
 use futures::io;
-use rlua::{Function, Lua, StdLib, Table, ToLua, Value};
-use std::{fs::Metadata, os::unix::prelude::MetadataExt, path::Path as FsPath, sync::Arc};
+use rlua::{Function, Lua, Result, StdLib, ToLua, Value};
+use std::{
+    collections::HashMap, fs::Metadata, os::unix::prelude::MetadataExt, path::Path as FsPath,
+    sync::Arc,
+};
 use tokio::fs::read_to_string;
 
 pub struct ScriptLoader {
@@ -34,7 +41,13 @@ impl ScriptLoader {
         Ok(())
     }
 
-    fn get_requirements(src: &str, name: &str) -> rlua::Result<Requirements> {
+    pub fn requirements(&self) -> Requirements {
+        self.scripts
+            .iter()
+            .fold(Requirements::empty(), |acc, x| acc | x.requirements)
+    }
+
+    fn get_requirements(src: &str, name: &str) -> Result<Requirements> {
         let lua = Lua::new_with(StdLib::BASE | StdLib::TABLE | StdLib::STRING);
         lua.context(|ctx| {
             ctx.load(src).set_name(name)?.exec()?;
@@ -47,6 +60,7 @@ impl ScriptLoader {
                     "stat" => acc | Requirements::STAT,
                     "path" => acc | Requirements::PATH,
                     "archive" => acc | Requirements::ARCHIVE,
+                    "file_db" => acc | Requirements::FILE_DB,
                     s => {
                         log::warn!("Unknown requirement listed: '{s}'");
                         acc
@@ -64,19 +78,21 @@ impl ScriptLoader {
 
 bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    struct Requirements: u32 {
+    pub struct Requirements: u32 {
         const PATH    = 0b0001;
         const STAT    = 0b0010;
         const ARCHIVE = 0b0100;
+        const FILE_DB = 0b1000;
     }
 }
 
 impl Requirements {
-    pub fn to_str(&self) -> &'static str {
+    pub fn to_str(self) -> &'static str {
         match self {
-            &Self::PATH => "path",
-            &Self::STAT => "stat",
-            &Self::ARCHIVE => "archive",
+            Self::PATH => "path",
+            Self::STAT => "stat",
+            Self::ARCHIVE => "archive",
+            Self::FILE_DB => "file_db",
             _ => "multiple requirements",
         }
     }
@@ -89,7 +105,7 @@ struct Stat {
 }
 
 impl<'lua> ToLua<'lua> for Stat {
-    fn to_lua(self, lua: rlua::Context<'lua>) -> rlua::Result<rlua::Value<'lua>> {
+    fn to_lua(self, lua: rlua::Context<'lua>) -> Result<rlua::Value<'lua>> {
         let table = lua.create_table()?;
         table.set("mode", self.mode & 0o777)?;
         table.set("is_dir", self.is_dir)?;
@@ -105,7 +121,12 @@ pub struct Script {
     name: String,
 }
 
-pub fn exec_one(script: &Script, meta: &FileMeta) -> rlua::Result<()> {
+pub fn exec_one(
+    script: &Script,
+    meta: &FileMeta,
+    databases: Arc<HashMap<String, Database>>,
+) -> Result<()> {
+    // Each (file,script) pair gets an isolated Lua context to run in
     let lua = Lua::new_with(StdLib::BASE | StdLib::TABLE | StdLib::STRING);
 
     lua.context(|ctx| {
@@ -138,7 +159,7 @@ pub fn exec_one(script: &Script, meta: &FileMeta) -> rlua::Result<()> {
                 },
             )?;
 
-            let throw = ctx.create_function(|_, detail: String| -> rlua::Result<()> {
+            let throw = ctx.create_function(|_, detail: String| -> Result<()> {
                 let err = AssertionError::throw(detail);
                 let err = rlua::Error::ExternalError(Arc::new(err));
                 Err(err)
@@ -166,8 +187,59 @@ pub fn exec_one(script: &Script, meta: &FileMeta) -> rlua::Result<()> {
             api.set("assert_ne", assert_ne)?;
             api.set("assert_contains", assert_contains)?;
             api.set("throw", throw)?;
+
             api.set("system", meta.system())?;
             api.set("config", meta.config())?;
+
+            let db_contains = scope.create_function(|_, ()| {
+                let has_db_requirement = script.requirements.contains(Requirements::FILE_DB);
+                if !has_db_requirement {
+                    let err = RequirementError::new(Requirements::FILE_DB);
+                    let err = rlua::Error::ExternalError(Arc::new(err));
+                    Err(err)?;
+                }
+
+                let stem = meta.path().file_stem().and_then(|s| s.to_str());
+                let result = match stem {
+                    Some(stem) => meta
+                        .system()
+                        .and_then(|sys| databases.as_ref().get(sys))
+                        .map(|db| db.contains(stem))
+                        .unwrap_or_default(),
+                    None => false,
+                };
+
+                Ok(result)
+            })?;
+
+            api.set("db_contains", db_contains)?;
+
+            let similar_files = scope.create_function(|_, ()| {
+                let has_db_requirement = script.requirements.contains(Requirements::FILE_DB);
+                if !has_db_requirement {
+                    let err = RequirementError::new(Requirements::FILE_DB);
+                    let err = rlua::Error::ExternalError(Arc::new(err));
+                    Err(err)?;
+                }
+
+                let db = meta.system().and_then(|sys| databases.as_ref().get(sys));
+                let path_str = meta.path().to_str();
+
+                match (db, path_str) {
+                    (Some(db), Some(path)) => {
+                        let file_tokens = Tokens::from_str(path);
+                        let similar_titles = db.similar_to(&file_tokens);
+                        let similar = similar_titles
+                            .into_iter()
+                            .map(|title| title.to_string())
+                            .collect::<Vec<_>>();
+                        Ok(similar)
+                    }
+                    _ => Ok(vec![]),
+                }
+            })?;
+
+            api.set("similar_files", similar_files)?;
 
             let stat = scope.create_function(|_, ()| {
                 if !script.requirements.contains(Requirements::STAT) {
@@ -219,7 +291,7 @@ struct Archive {
 }
 
 impl<'lua> ToLua<'lua> for Archive {
-    fn to_lua(self, lua: rlua::Context<'lua>) -> rlua::Result<Value<'lua>> {
+    fn to_lua(self, lua: rlua::Context<'lua>) -> Result<Value<'lua>> {
         let table = lua.create_table()?;
 
         table.set("files", self.files)?;
@@ -247,7 +319,7 @@ struct Path {
 }
 
 impl<'lua> ToLua<'lua> for Path {
-    fn to_lua(self, lua: rlua::Context<'lua>) -> rlua::Result<Value<'lua>> {
+    fn to_lua(self, lua: rlua::Context<'lua>) -> Result<Value<'lua>> {
         let table = lua.create_table()?;
 
         table.set("extension", self.extension)?;
@@ -272,7 +344,7 @@ impl From<&FsPath> for Path {
             path: value
                 .to_str()
                 .map(|p| p.to_string())
-                .unwrap_or_else(|| String::new()),
+                .unwrap_or_else(String::new),
         }
     }
 }
@@ -317,19 +389,16 @@ struct AssertionError {
 
 impl AssertionError {
     pub fn expected(expected: &Value, actual: &Value, detail: Option<String>) -> Self {
-        let expected = fmt_lua(&expected);
-        let actual = fmt_lua(&actual);
+        let expected = fmt_lua(expected);
+        let actual = fmt_lua(actual);
         let message = detail.unwrap_or_else(|| format!("expected {expected} to equal {actual}"));
 
         Self { message }
     }
 
     pub fn unexpected(unexpected: &Value, detail: Option<String>) -> Self {
-        let unexpected = fmt_lua(&unexpected);
-        let detail = detail
-            .as_ref()
-            .map(|s| s.as_str())
-            .unwrap_or("assertion error");
+        let unexpected = fmt_lua(unexpected);
+        let detail = detail.as_deref().unwrap_or("assertion error");
 
         let message = format!("{detail} - unexpected value '{unexpected}'");
         Self { message }
@@ -346,7 +415,7 @@ impl AssertionError {
     }
 }
 
-impl<'a> std::fmt::Display for AssertionError {
+impl std::fmt::Display for AssertionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)
     }

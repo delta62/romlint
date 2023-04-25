@@ -1,3 +1,4 @@
+use crate::db::Database;
 use crate::linter::Diagnostic;
 use crate::scripts::{exec_one, ScriptLoader};
 use crate::{
@@ -6,14 +7,17 @@ use crate::{
     ui::{Message, Report},
 };
 use snafu::prelude::*;
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 
 pub fn check<P: AsRef<Path>>(
     cwd: P,
     file: &FileMeta<'_>,
     script_loader: &ScriptLoader,
     tx: &Sender<Message>,
+    databases: Arc<HashMap<String, Database>>,
 ) -> Result<bool> {
     use rlua::Error::*;
 
@@ -31,7 +35,7 @@ pub fn check<P: AsRef<Path>>(
     let mut diagnostics = Vec::new();
 
     for lint in script_loader.iter() {
-        if let Err(err) = exec_one(lint, file) {
+        if let Err(err) = exec_one(lint, file, databases.clone()) {
             let message = match err {
                 CallbackError { cause, .. } => format!("{cause}"),
                 err => format!("{err}"),

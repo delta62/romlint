@@ -15,8 +15,9 @@ use clap::Parser;
 use commands::{check, scan};
 use error::{BrokenPipeErr, IoErr, Result};
 use filemeta::FileMeta;
-use scripts::ScriptLoader;
+use scripts::{Requirements, ScriptLoader};
 use snafu::ResultExt;
+use std::sync::Arc;
 use std::time::Instant;
 use std::{sync::mpsc, thread::spawn};
 use tokio::fs::read_dir;
@@ -52,22 +53,23 @@ async fn run(args: Args) -> Result<()> {
     }
 
     let ui_thread = spawn(move || Ui::new(rx, !args.hide_passes).run());
-    // let databases = if let Some(sys) = &args.system {
-    //     db::load_only(&db_path, &[sys.as_str()], &tx).await?
-    // } else {
-    //     db::load_all(&db_path, &tx).await?
-    // };
+    let databases = if let Some(sys) = &args.system {
+        db::load_only(&db_path, &[sys.as_str()], &tx).await?
+    } else {
+        db::load_all(&db_path, &tx).await?
+    };
+    let databases = Arc::new(databases);
 
     if let Some(file) = args.file.as_ref() {
         let start_time = Instant::now();
         let mut summary = Summary::new(start_time);
-        let read_archives = !args.no_archive_checks;
+        let read_archives = script_loader.requirements().contains(Requirements::ARCHIVE);
         let cwd = args.cwd();
-        let system = args.system.as_ref().map(|s| s.as_str());
+        let system = args.system.as_deref();
         let file = FileMeta::from_path(system, &config, file, read_archives)
             .await
             .context(IoErr { path: file })?;
-        let passed = check(cwd, &file, &script_loader, &tx)?;
+        let passed = check(cwd, &file, &script_loader, &tx, databases)?;
 
         if passed {
             summary.add_success(system.unwrap());
@@ -79,7 +81,7 @@ async fn run(args: Args) -> Result<()> {
         tx.send(Message::Finished(summary))
             .context(BrokenPipeErr {})?;
     } else {
-        scan(&args, &config, &script_loader, tx.clone()).await?;
+        scan(&args, &config, &script_loader, tx.clone(), databases).await?;
     }
 
     ui_thread.join().unwrap()?;

@@ -95,9 +95,9 @@ impl Ui {
                         loading_items.push((name, true))
                     }
                     Message::EndProgress(id) => {
-                        loading_items
-                            .get_mut(id)
-                            .map(|(_, is_loading)| *is_loading = false);
+                        if let Some((_, is_loading)) = loading_items.get_mut(id) {
+                            *is_loading = false;
+                        }
                     }
                     Message::Finished(summary) => {
                         clear_line().context(IoErr { path: "stdout" })?;

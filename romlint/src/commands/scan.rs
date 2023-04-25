@@ -1,6 +1,7 @@
 use super::check;
 use crate::args::Args;
 use crate::config::Config;
+use crate::db::Database;
 use crate::error::{BrokenPipeErr, IoErr};
 use crate::filemeta::FileMeta;
 use crate::scripts::ScriptLoader;
@@ -9,7 +10,9 @@ use crate::Result;
 use dir_walker::walk;
 use futures::TryStreamExt;
 use snafu::prelude::*;
+use std::collections::HashMap;
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 use std::time::Instant;
 
 pub async fn scan(
@@ -17,6 +20,7 @@ pub async fn scan(
     config: &Config,
     script_loader: &ScriptLoader,
     tx: Sender<Message>,
+    databases: Arc<HashMap<String, Database>>,
 ) -> Result<()> {
     let start_time = Instant::now();
     let mut summary = Summary::new(start_time);
@@ -32,7 +36,7 @@ pub async fn scan(
 
     while let Some(file) = stream.try_next().await.context(IoErr { path })? {
         let system = file.system().unwrap_or("unknown");
-        let pass = check(path, &file, &script_loader, &tx)?;
+        let pass = check(path, &file, script_loader, &tx, databases.clone())?;
 
         if pass {
             summary.add_success(system);

@@ -67,7 +67,7 @@ impl<'cfg, 'lua> ToLua<'lua> for &ResolvedConfig<'cfg> {
         table.set("archive_format", self.archive_format.clone())?;
         table.set(
             "obsolete_formats",
-            self.obsolete_formats.clone().unwrap_or_else(|| vec![]),
+            self.obsolete_formats.clone().unwrap_or_default(),
         )?;
         table.set("raw_format", self.raw_format.clone())?;
 
@@ -93,6 +93,13 @@ where
             E: de::Error,
         {
             Ok(vec![v])
+        }
+
+        fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![v.to_string()])
         }
 
         fn visit_seq<A>(self, seq: A) -> std::result::Result<Self::Value, A::Error>

@@ -1,43 +1,21 @@
-use crate::error::{NoParentErr, Result};
-use clap::Parser;
-use snafu::prelude::*;
+use clap::{Parser, Subcommand};
 use std::path::{Path, PathBuf};
 
+/// A tool for enumerating and keeping ROMs organized
 #[derive(Clone, Debug, Parser)]
+#[clap(version)]
 pub struct Args {
-    /// The directory to use as the working directory when searching for roms and the
-    /// config file
+    #[command(subcommand)]
+    pub command: Command,
+
+    /// Set the working directory to use. If unset, defaults to the current working
+    /// directory
     #[clap(short, long)]
     cwd: Option<String>,
 
-    /// The path (relative to the current working directory) where a romlint.toml
-    /// config file is located
-    #[clap(long, default_value = "romlint.toml")]
-    pub config_path: String,
-
-    /// Override the system to run lint rules for. If not specified, roms are assumed
-    /// to exist inside of directories which share a name with their system.
+    /// Override the system to run against. If unspecified, all systems are used
     #[clap(short, long)]
     pub system: Option<String>,
-
-    /// Do not perform any checks that look inside of archives. This will run fewer
-    /// checks but will result in a large performance boost.
-    #[clap(long, default_value_t = false)]
-    pub no_archive_checks: bool,
-
-    /// Only lint the given file
-    pub file: Option<String>,
-
-    /// Dump all known ROM names to stdout, separated by newlines
-    #[clap(short, long)]
-    pub dump_system: Option<String>,
-
-    #[clap(long, default_value_t = false)]
-    pub inventory: bool,
-
-    /// Whether or not to show files which pass lint checks
-    #[clap(long, default_value_t = false)]
-    pub hide_passes: bool,
 }
 
 impl Args {
@@ -50,15 +28,28 @@ impl Args {
     }
 
     pub fn config_path(&self) -> PathBuf {
-        self.cwd().join(self.config_path.as_str())
+        self.cwd().join("romlint.toml")
     }
 
-    pub fn config_dir(&self) -> Result<PathBuf> {
-        let path = self.config_path();
-
-        path.as_path()
-            .parent()
-            .map(|path| path.to_path_buf())
-            .context(NoParentErr { path })
+    pub fn system_path(&self, system: &str) -> PathBuf {
+        self.cwd().join(system)
     }
+}
+
+/// The command to run
+#[derive(Clone, Debug, Subcommand)]
+pub enum Command {
+    /// Dump all known ROM names to stdout
+    Dump,
+    /// List local ROM names to stdout
+    Inventory,
+    /// Run lints against local ROMs
+    Lint {
+        /// Only show output for files which are failing lints
+        #[clap(long, default_value_t = false)]
+        hide_passes: bool,
+
+        /// Only lint the given file. If omitted, all files are linted.
+        file: Option<String>,
+    },
 }

@@ -10,7 +10,7 @@ dir_walker = { path = "../dir_walker" }
 env_logger = "0.10.0"
 futures = "0.3.26"
 log = "0.4.17"
-no_intro = { path = "../no_intro" }
+dat = { path = "../dat" }
 nu-ansi-term = "0.46.0"
 rlua = "0.19.4"
 serde = { version = "1.0.152", features = ["derive"] }

@@ -1,9 +1,9 @@
 use crate::error::{DatabaseNameErr, DatabaseReadErr, IoErr, Result};
 use crate::ui::Message;
 use crate::word_match::Tokens;
+use dat::DataFile;
 use futures::future::try_join_all;
 use futures::TryFutureExt;
-use no_intro::DataFile;
 use snafu::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
@@ -17,9 +17,10 @@ impl Database {
         let s = read_to_string(path.as_ref()).await.context(IoErr {
             path: path.as_ref(),
         })?;
-        let datafile = no_intro::DataFile::from_file(s.as_str()).context(DatabaseReadErr {
+        let datafile = DataFile::from_file(&s).context(DatabaseReadErr {
             path: path.as_ref(),
         })?;
+
         Ok(Self(datafile))
     }
 
@@ -31,7 +32,7 @@ impl Database {
     }
 
     pub fn contains(&self, file: &str) -> bool {
-        self.0.games.iter().any(|game| game.name.as_str() == file)
+        self.0.games.iter().any(|game| &game.name == file)
     }
 
     pub fn similar_to<'s, 'a: 's>(&'s self, tokens: &'a Tokens<'a>) -> Vec<&'s str> {

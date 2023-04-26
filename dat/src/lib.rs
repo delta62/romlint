@@ -1,5 +1,6 @@
 use serde::Deserialize;
-use std::fmt::Display;
+use std::error;
+use std::fmt::{self, Display, Formatter};
 
 // Derived from https://datomatic.no-intro.org/stuff/schema_nointro_datfile_v2.xsd
 
@@ -10,12 +11,12 @@ pub struct Error {
 }
 
 impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{} - {}", self.message, self.path)
     }
 }
 
-impl std::error::Error for Error {}
+impl error::Error for Error {}
 
 #[derive(Debug, Deserialize)]
 pub struct DataFile {

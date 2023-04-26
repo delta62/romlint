@@ -1,16 +1,12 @@
+use crate::ui::Message;
 use snafu::prelude::*;
 use std::{io, path::PathBuf, sync::mpsc::SendError};
-
-use crate::ui::Message;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub), context(suffix(Err)))]
 pub enum Error {
     #[snafu(display("error reading {} database: {source}", path.display()))]
-    DatabaseRead {
-        path: PathBuf,
-        source: no_intro::Error,
-    },
+    DatabaseRead { path: PathBuf, source: dat::Error },
 
     #[snafu(display("unable to determine the system name of {}", path.display()))]
     DatabaseName { path: PathBuf },

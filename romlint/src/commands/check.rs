@@ -1,5 +1,3 @@
-use snafu::OptionExt;
-
 use super::lint::LintContext;
 use crate::{
     error::{InvalidPathErr, Result},
@@ -8,10 +6,11 @@ use crate::{
     scripts::exec_one,
     ui::{Message, Report},
 };
+use snafu::OptionExt;
 
 pub fn check<F>(ctx: LintContext, file: &FileMeta<'_>, send: F) -> Result<bool>
 where
-    F: Fn(Message),
+    F: Fn(Message) -> Result<()>,
 {
     let path = ctx
         .relative_path(file.path())
@@ -19,7 +18,7 @@ where
         .map(|s| s.to_owned())
         .context(InvalidPathErr { path: file.path() })?;
 
-    send(Message::SetStatus(path.clone()));
+    send(Message::SetStatus(path.clone()))?;
 
     let diagnostics = ctx.scripts().fold(Vec::new(), |mut acc, lint| {
         let result = exec_one(lint, file, ctx.databases());
@@ -38,7 +37,7 @@ where
     Ok(passed)
 }
 
-fn create_diagnostic(file: &FileMeta<'_>, err: rlua::Error) -> Diagnostic {
+fn create_diagnostic(file: &FileMeta, err: rlua::Error) -> Diagnostic {
     use rlua::Error::*;
 
     let message = match err {

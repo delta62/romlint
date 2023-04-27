@@ -58,6 +58,7 @@ pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
         db::load_all(&db_path, Some(&tx)).await?
     };
     let databases = Arc::new(databases);
+    let on_message = |message: Message| tx.send(message).context(BrokenPipeErr {});
 
     if let Some(file) = lint_args.file.as_ref() {
         let start_time = Instant::now();
@@ -68,7 +69,7 @@ pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
         let file = FileMeta::from_path(system, &config, file, read_archives)
             .await
             .context(IoErr { path: file })?;
-        let passed = check(cwd, &file, &script_loader, &tx, databases)?;
+        let passed = check(ctx, &file, on_message)?;
 
         if passed {
             summary.add_success(system.unwrap());

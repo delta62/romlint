@@ -1,15 +1,17 @@
 use crate::error::{DatabaseNameErr, DatabaseReadErr, IoErr, Result};
 use crate::ui::Message;
 use crate::word_match::Tokens;
-use dat::DataFile;
+use dat::{DataFile, Game};
 use futures::future::try_join_all;
 use futures::TryFutureExt;
 use snafu::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::mpsc::Sender;
+use std::sync::Arc;
 use tokio::fs::{read_dir, read_to_string};
 
+pub struct Databases(Arc<HashMap<String, Database>>);
 pub struct Database(DataFile);
 
 impl Database {
@@ -24,11 +26,8 @@ impl Database {
         Ok(Self(datafile))
     }
 
-    pub fn dump(&self) {
-        self.0
-            .games
-            .iter()
-            .for_each(|game| println!("{}", game.name));
+    pub fn files(&self) -> impl Iterator<Item = &Game> {
+        self.0.games.iter()
     }
 
     pub fn contains(&self, file: &str) -> bool {
@@ -64,8 +63,8 @@ impl Database {
 
 pub async fn load_all<P: AsRef<Path>>(
     path: P,
-    sender: &Sender<Message>,
-) -> Result<HashMap<String, Database>> {
+    sender: Option<&Sender<Message>>,
+) -> Result<Databases> {
     let path = path.as_ref();
     let mut readdir = read_dir(path).await.context(IoErr { path })?;
     let mut futures = Vec::new();
@@ -84,13 +83,13 @@ pub async fn load_all<P: AsRef<Path>>(
                 path: path.as_path(),
             })?;
 
-        sender
-            .send(Message::StartProgress(idx, system.clone()))
-            .unwrap();
+        sender.map(|s| s.send(Message::StartProgress(idx, system.clone())));
 
         let future = Database::from_file(path)
             .map_ok(|db| (system, db))
-            .inspect_ok(move |_| sender.send(Message::EndProgress(idx)).unwrap());
+            .inspect_ok(move |_| {
+                sender.map(|s| s.send(Message::EndProgress(idx)));
+            });
         futures.push(future);
     }
 
@@ -100,20 +99,18 @@ pub async fn load_all<P: AsRef<Path>>(
 pub async fn load_only<P: AsRef<Path>>(
     path: P,
     systems: &[&str],
-    sender: &Sender<Message>,
-) -> Result<HashMap<String, Database>> {
+    sender: Option<&Sender<Message>>,
+) -> Result<Databases> {
     let path = path.as_ref();
     let futures = systems.iter().enumerate().map(|(i, sys)| {
         let mut path = path.join(sys);
         path.set_extension("dat");
-        sender
-            .send(Message::StartProgress(i, sys.to_string()))
-            .unwrap();
+        sender.map(|sender| sender.send(Message::StartProgress(i, sys.to_string())));
 
         Database::from_file(path)
             .map_ok(move |db| (i, sys.to_string(), db))
             .inspect_ok(|(i, _, _)| {
-                sender.send(Message::EndProgress(*i)).unwrap();
+                sender.map(|s| s.send(Message::EndProgress(*i)).unwrap());
             })
             .map_ok(|(_, sys, db)| (sys, db))
     });

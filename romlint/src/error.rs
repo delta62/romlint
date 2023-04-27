@@ -17,6 +17,9 @@ pub enum Error {
     #[snafu(display("error accessing {}", path.display()))]
     Io { path: PathBuf, source: io::Error },
 
+    #[snafu(display("unable to process path {}", path.display()))]
+    InvalidPath { path: PathBuf },
+
     #[snafu(display("attempted to send over a broken pipe"))]
     BrokenPipe { source: SendError<Message> },
 

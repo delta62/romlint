@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Args as ClapArgs, Parser, Subcommand};
 use std::path::{Path, PathBuf};
 
 /// A tool for enumerating and keeping ROMs organized
@@ -44,12 +44,15 @@ pub enum Command {
     /// List local ROM names to stdout
     Inventory,
     /// Run lints against local ROMs
-    Lint {
-        /// Only show output for files which are failing lints
-        #[clap(long, default_value_t = false)]
-        hide_passes: bool,
+    Lint(LintArgs),
+}
 
-        /// Only lint the given file. If omitted, all files are linted.
-        file: Option<String>,
-    },
+#[derive(Clone, Debug, ClapArgs)]
+pub struct LintArgs {
+    /// Only show output for files which are failing lints
+    #[clap(long, default_value_t = false)]
+    pub hide_passes: bool,
+
+    /// Only lint the given file. If omitted, all files are linted.
+    pub file: Option<String>,
 }

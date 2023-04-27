@@ -1,55 +1,50 @@
-use crate::db::Database;
-use crate::linter::Diagnostic;
-use crate::scripts::{exec_one, ScriptLoader};
+use snafu::OptionExt;
+
+use super::lint::LintContext;
 use crate::{
-    error::{BrokenPipeErr, Result},
+    error::{InvalidPathErr, Result},
     filemeta::FileMeta,
+    linter::Diagnostic,
+    scripts::exec_one,
     ui::{Message, Report},
 };
-use snafu::prelude::*;
-use std::collections::HashMap;
-use std::path::Path;
-use std::sync::mpsc::Sender;
-use std::sync::Arc;
 
-pub fn check<P: AsRef<Path>>(
-    cwd: P,
-    file: &FileMeta<'_>,
-    script_loader: &ScriptLoader,
-    tx: &Sender<Message>,
-    databases: Arc<HashMap<String, Database>>,
-) -> Result<bool> {
-    use rlua::Error::*;
+pub fn check<F>(ctx: LintContext, file: &FileMeta<'_>, send: F) -> Result<bool>
+where
+    F: Fn(Message),
+{
+    let path = ctx
+        .relative_path(file.path())
+        .and_then(|p| p.to_str())
+        .map(|s| s.to_owned())
+        .context(InvalidPathErr { path: file.path() })?;
 
-    let path = file
-        .path()
-        .strip_prefix(cwd)
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_owned();
+    send(Message::SetStatus(path.clone()));
 
-    tx.send(Message::SetStatus(path.clone()))
-        .context(BrokenPipeErr {})?;
-
-    let mut diagnostics = Vec::new();
-
-    for lint in script_loader.iter() {
-        if let Err(err) = exec_one(lint, file, databases.clone()) {
-            let message = match err {
-                CallbackError { cause, .. } => format!("{cause}"),
-                err => format!("{err}"),
-            };
-
-            let diag = Diagnostic::from_file(file, message);
-            diagnostics.push(diag);
+    let diagnostics = ctx.scripts().fold(Vec::new(), |mut acc, lint| {
+        let result = exec_one(lint, file, ctx.databases());
+        if let Err(err) = result {
+            let diag = create_diagnostic(file, err);
+            acc.push(diag);
         }
-    }
+
+        acc
+    });
 
     let passed = diagnostics.is_empty();
     let report = Report { diagnostics, path };
-
-    tx.send(Message::Report(report)).context(BrokenPipeErr {})?;
+    send(Message::Report(report));
 
     Ok(passed)
+}
+
+fn create_diagnostic(file: &FileMeta<'_>, err: rlua::Error) -> Diagnostic {
+    use rlua::Error::*;
+
+    let message = match err {
+        CallbackError { cause, .. } => format!("{cause}"),
+        err => format!("{err}"),
+    };
+
+    Diagnostic::from_file(file, message)
 }

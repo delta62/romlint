@@ -11,8 +11,23 @@ use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use tokio::fs::{read_dir, read_to_string};
 
+#[derive(Default)]
 pub struct Databases(Arc<HashMap<String, Database>>);
 pub struct Database(DataFile);
+
+impl Databases {
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn add<S: Into<String>>(&mut self, system: S, db: Database) {
+        self.0.insert(system.into(), db);
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Database> {
+        self.0.values()
+    }
+}
 
 impl Database {
     pub async fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
@@ -61,14 +76,16 @@ impl Database {
     }
 }
 
-pub async fn load_all<P: AsRef<Path>>(
-    path: P,
-    sender: Option<&Sender<Message>>,
-) -> Result<Databases> {
+pub async fn load_all<P, F>(path: P, send: F) -> Result<Databases>
+where
+    F: Fn(Message) -> Result<()>,
+    P: AsRef<Path>,
+{
     let path = path.as_ref();
     let mut readdir = read_dir(path).await.context(IoErr { path })?;
     let mut futures = Vec::new();
     let mut i = 0;
+    let mut databases = Databases::default();
 
     while let Some(entry) = readdir.next_entry().await.context(IoErr { path })? {
         let idx = i;
@@ -83,37 +100,48 @@ pub async fn load_all<P: AsRef<Path>>(
                 path: path.as_path(),
             })?;
 
-        sender.map(|s| s.send(Message::StartProgress(idx, system.clone())));
+        send(Message::StartProgress(idx, system.clone()))?;
 
         let future = Database::from_file(path)
             .map_ok(|db| (system, db))
             .inspect_ok(move |_| {
-                sender.map(|s| s.send(Message::EndProgress(idx)));
+                send(Message::EndProgress(idx)).unwrap();
             });
         futures.push(future);
     }
 
-    Ok(try_join_all(futures).await?.into_iter().collect())
+    let loaded_dbs = try_join_all(futures).await?.into_iter().collect::<Vec<_>>();
+    for (sys, db) in loaded_dbs {
+        databases.add(sys, db);
+    }
+
+    Ok(databases)
 }
 
-pub async fn load_only<P: AsRef<Path>>(
-    path: P,
-    systems: &[&str],
-    sender: Option<&Sender<Message>>,
-) -> Result<Databases> {
+pub async fn load_only<P, F>(path: P, systems: &[&str], send: F) -> Result<Databases>
+where
+    P: AsRef<Path>,
+    F: Fn(Message) -> Result<()>,
+{
+    let mut databases = Databases::default();
     let path = path.as_ref();
     let futures = systems.iter().enumerate().map(|(i, sys)| {
         let mut path = path.join(sys);
         path.set_extension("dat");
-        sender.map(|sender| sender.send(Message::StartProgress(i, sys.to_string())));
+        send(Message::StartProgress(i, sys.to_string())).unwrap();
 
         Database::from_file(path)
             .map_ok(move |db| (i, sys.to_string(), db))
             .inspect_ok(|(i, _, _)| {
-                sender.map(|s| s.send(Message::EndProgress(*i)).unwrap());
+                send(Message::EndProgress(*i)).unwrap();
             })
             .map_ok(|(_, sys, db)| (sys, db))
     });
 
-    Ok(try_join_all(futures).await?.into_iter().collect())
+    let loaded_dbs = try_join_all(futures).await?.into_iter().collect::<Vec<_>>();
+    for (sys, db) in loaded_dbs {
+        databases.add(sys, db);
+    }
+
+    Ok(databases)
 }

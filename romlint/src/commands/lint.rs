@@ -17,12 +17,18 @@ use tokio::fs::read_dir;
 pub struct LintContext {
     cwd: PathBuf,
     scripts: ScriptLoader,
+    system: Option<String>,
 }
 
 impl LintContext {
-    pub fn new(cwd: PathBuf) -> Self {
+    pub fn new(cwd: PathBuf, system: Option<&String>) -> Self {
         let scripts = ScriptLoader::new();
-        Self { cwd, scripts }
+        let system = system.cloned();
+        Self {
+            cwd,
+            scripts,
+            system,
+        }
     }
 
     pub fn relative_path<P: AsRef<Path>>(&self, path: P) -> Option<&Path> {
@@ -31,6 +37,15 @@ impl LintContext {
 
     pub fn scripts(&self) -> impl Iterator<Item = &Script> {
         self.scripts.iter()
+    }
+
+    pub fn scan_dirs(&self) -> &Path {
+        todo!()
+    }
+
+    pub fn should_read_archives(&self) -> bool {
+        // script_loader.requirements().contains(Requirements::ARCHIVE);
+        todo!()
     }
 
     pub fn databases(&self) -> Arc<HashMap<String, Database>> {
@@ -50,15 +65,19 @@ pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
         script_loader.load(file.path()).await.unwrap();
     }
 
+    let on_message = |message: Message| tx.send(message).context(BrokenPipeErr);
+
     let hide_passes = lint_args.hide_passes;
     let ui_thread = spawn(move || Ui::new(rx, !hide_passes).run());
     let databases = if let Some(sys) = &args.system {
-        db::load_only(&db_path, &[sys.as_str()], Some(&tx)).await?
+        db::load_only(&db_path, &[sys.as_str()], on_message).await?
     } else {
-        db::load_all(&db_path, Some(&tx)).await?
+        db::load_all(&db_path, on_message).await?
     };
     let databases = Arc::new(databases);
     let on_message = |message: Message| tx.send(message).context(BrokenPipeErr {});
+
+    let ctx = LintContext::new(args.cwd(), args.system.as_ref());
 
     if let Some(file) = lint_args.file.as_ref() {
         let start_time = Instant::now();
@@ -69,7 +88,7 @@ pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
         let file = FileMeta::from_path(system, &config, file, read_archives)
             .await
             .context(IoErr { path: file })?;
-        let passed = check(ctx, &file, on_message)?;
+        let passed = check(&ctx, &file, on_message)?;
 
         if passed {
             summary.add_success(system.unwrap());
@@ -81,7 +100,7 @@ pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
         tx.send(Message::Finished(summary))
             .context(BrokenPipeErr {})?;
     } else {
-        scan(&args, &config, &script_loader, tx, databases).await?;
+        scan(&ctx, on_message).await?;
     }
 
     ui_thread.join().unwrap()?;

@@ -15,7 +15,7 @@ pub async fn dump(args: Args) -> Result<()> {
         dbs = db::load_all(&db_path, None).await?;
     }
 
-    for db in dbs.values() {
+    for db in dbs.iter() {
         for file in db.files() {
             println!("{}", file.name);
         }

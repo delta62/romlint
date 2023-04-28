@@ -8,7 +8,7 @@ use crate::{
 };
 use snafu::OptionExt;
 
-pub fn check<F>(ctx: LintContext, file: &FileMeta<'_>, send: F) -> Result<bool>
+pub fn check<F>(ctx: &LintContext, file: &FileMeta<'_>, send: F) -> Result<bool>
 where
     F: Fn(Message) -> Result<()>,
 {

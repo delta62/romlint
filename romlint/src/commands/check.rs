@@ -14,8 +14,7 @@ where
 {
     let path = ctx
         .relative_path(file.path())
-        .and_then(|p| p.to_str())
-        .map(|s| s.to_owned())
+        .and_then(|p| p.to_str().map(|s| s.to_owned()))
         .context(InvalidPathErr { path: file.path() })?;
 
     send(Message::SetStatus(path.clone()))?;
@@ -32,7 +31,7 @@ where
 
     let passed = diagnostics.is_empty();
     let report = Report { diagnostics, path };
-    send(Message::Report(report));
+    send(Message::Report(report))?;
 
     Ok(passed)
 }

@@ -1,9 +1,9 @@
 use crate::args::{Args, LintArgs};
 use crate::commands::{check, scan};
-use crate::config;
+use crate::config::{self, Config};
 use crate::db::{self, Database};
 use crate::error::{BrokenPipeErr, IoErr, Result};
-use crate::filemeta::FileMeta;
+use crate::filemeta::{Extractor, FileMeta, ZipExtractor};
 use crate::scripts::{Requirements, Script, ScriptLoader};
 use crate::ui::{Message, Summary, Ui};
 use snafu::ResultExt;
@@ -31,12 +31,23 @@ impl LintContext {
         }
     }
 
-    pub fn relative_path<P: AsRef<Path>>(&self, path: P) -> Option<&Path> {
-        path.as_ref().strip_prefix(self.cwd.as_path()).ok()
+    pub fn relative_path<P: AsRef<Path>>(&self, path: P) -> Option<PathBuf> {
+        let path = path.as_ref();
+        path.strip_prefix(self.cwd.as_path())
+            .map(|p| p.to_path_buf())
+            .ok()
     }
 
     pub fn scripts(&self) -> impl Iterator<Item = &Script> {
         self.scripts.iter()
+    }
+
+    pub fn config(&self) -> &Config {
+        todo!()
+    }
+
+    pub fn system(&self) -> Option<&String> {
+        self.system.as_ref()
     }
 
     pub fn scan_dirs(&self) -> &Path {
@@ -44,8 +55,7 @@ impl LintContext {
     }
 
     pub fn should_read_archives(&self) -> bool {
-        // script_loader.requirements().contains(Requirements::ARCHIVE);
-        todo!()
+        self.scripts.requirements().contains(Requirements::ARCHIVE)
     }
 
     pub fn databases(&self) -> Arc<HashMap<String, Database>> {
@@ -66,26 +76,29 @@ pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
     }
 
     let on_message = |message: Message| tx.send(message).context(BrokenPipeErr);
-
     let hide_passes = lint_args.hide_passes;
     let ui_thread = spawn(move || Ui::new(rx, !hide_passes).run());
     let databases = if let Some(sys) = &args.system {
-        db::load_only(&db_path, &[sys.as_str()], on_message).await?
+        db::load_only(&db_path, &[sys.as_str()], &on_message).await?
     } else {
-        db::load_all(&db_path, on_message).await?
+        db::load_all(&db_path, &on_message).await?
     };
-    let databases = Arc::new(databases);
     let on_message = |message: Message| tx.send(message).context(BrokenPipeErr {});
 
     let ctx = LintContext::new(args.cwd(), args.system.as_ref());
 
     if let Some(file) = lint_args.file.as_ref() {
         let start_time = Instant::now();
+        let mut extractors = HashMap::<String, Box<dyn Extractor>>::new();
         let mut summary = Summary::new(start_time);
+
         let read_archives = script_loader.requirements().contains(Requirements::ARCHIVE);
-        let cwd = args.cwd();
+        if read_archives {
+            extractors.insert("zip".to_string(), Box::new(ZipExtractor));
+        }
+
         let system = args.system.as_deref();
-        let file = FileMeta::from_path(system, &config, file, read_archives)
+        let file = FileMeta::from_path(system, &config, file, &extractors)
             .await
             .context(IoErr { path: file })?;
         let passed = check(&ctx, &file, on_message)?;

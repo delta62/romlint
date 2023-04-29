@@ -7,12 +7,10 @@ use futures::TryFutureExt;
 use snafu::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::mpsc::Sender;
-use std::sync::Arc;
 use tokio::fs::{read_dir, read_to_string};
 
 #[derive(Default)]
-pub struct Databases(Arc<HashMap<String, Database>>);
+pub struct Databases(HashMap<String, Database>);
 pub struct Database(DataFile);
 
 impl Databases {
@@ -76,7 +74,7 @@ impl Database {
     }
 }
 
-pub async fn load_all<P, F>(path: P, send: F) -> Result<Databases>
+pub async fn load_all<P, F>(path: P, send: &F) -> Result<Databases>
 where
     F: Fn(Message) -> Result<()>,
     P: AsRef<Path>,
@@ -118,7 +116,7 @@ where
     Ok(databases)
 }
 
-pub async fn load_only<P, F>(path: P, systems: &[&str], send: F) -> Result<Databases>
+pub async fn load_only<P, F>(path: P, systems: &[&str], send: &F) -> Result<Databases>
 where
     P: AsRef<Path>,
     F: Fn(Message) -> Result<()>,

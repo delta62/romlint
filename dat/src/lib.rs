@@ -26,12 +26,6 @@ pub struct DataFile {
 }
 
 #[derive(Debug, Deserialize)]
-pub enum DataFileItem {
-    Game(Game),
-    Header(Header),
-}
-
-#[derive(Debug, Deserialize)]
 pub struct Header {
     pub name: String,
     pub description: String,

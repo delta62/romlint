@@ -15,16 +15,19 @@ use std::{sync::mpsc, thread::spawn};
 use tokio::fs::read_dir;
 
 pub struct LintContext {
+    config: Config,
     cwd: PathBuf,
     scripts: ScriptLoader,
     system: Option<String>,
 }
 
 impl LintContext {
-    pub fn new(cwd: PathBuf, system: Option<&String>) -> Self {
+    pub fn new(cwd: PathBuf, system: Option<&String>, config: Config) -> Self {
         let scripts = ScriptLoader::new();
         let system = system.cloned();
+
         Self {
+            config,
             cwd,
             scripts,
             system,
@@ -43,15 +46,18 @@ impl LintContext {
     }
 
     pub fn config(&self) -> &Config {
-        todo!()
+        &self.config
     }
 
     pub fn system(&self) -> Option<&String> {
         self.system.as_ref()
     }
 
-    pub fn scan_dirs(&self) -> &Path {
-        todo!()
+    pub fn scan_dirs(&self) -> PathBuf {
+        match &self.system {
+            Some(system) => self.cwd.join(system),
+            None => self.cwd.clone(),
+        }
     }
 
     pub fn should_read_archives(&self) -> bool {
@@ -83,9 +89,9 @@ pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
     } else {
         db::load_all(&db_path, &on_message).await?
     };
-    let on_message = |message: Message| tx.send(message).context(BrokenPipeErr {});
 
-    let ctx = LintContext::new(args.cwd(), args.system.as_ref());
+    let on_message = |message: Message| tx.send(message).context(BrokenPipeErr {});
+    let ctx = LintContext::new(args.cwd(), args.system.as_ref(), config);
 
     if let Some(file) = lint_args.file.as_ref() {
         let start_time = Instant::now();
@@ -98,7 +104,7 @@ pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
         }
 
         let system = args.system.as_deref();
-        let file = FileMeta::from_path(system, &config, file, &extractors)
+        let file = FileMeta::from_path(system, ctx.config(), file, &extractors)
             .await
             .context(IoErr { path: file })?;
         let passed = check(&ctx, &file, on_message)?;

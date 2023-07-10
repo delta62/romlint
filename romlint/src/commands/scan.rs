@@ -17,6 +17,7 @@ where
     let mut summary = Summary::new(Instant::now());
     let mut extractors = HashMap::<String, Box<dyn Extractor>>::new();
     let path = ctx.scan_dirs();
+    let path = path.as_path();
 
     if ctx.should_read_archives() {
         extractors.insert("zip".to_string(), Box::new(ZipExtractor));

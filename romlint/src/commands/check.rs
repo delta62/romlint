@@ -20,6 +20,7 @@ where
     send(Message::SetStatus(path.clone()))?;
 
     let diagnostics = ctx.scripts().fold(Vec::new(), |mut acc, lint| {
+        log::debug!("linting {:?} with {:?}", file.path(), lint);
         let result = exec_one(lint, file, ctx.databases());
         if let Err(err) = result {
             let diag = create_diagnostic(file, err);

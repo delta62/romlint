@@ -25,6 +25,10 @@ impl Databases {
     pub fn iter(&self) -> impl Iterator<Item = &Database> {
         self.0.values()
     }
+
+    pub fn get(&self, db: &str) -> Option<&Database> {
+        self.0.get(db)
+    }
 }
 
 impl Database {

@@ -1,7 +1,7 @@
 use crate::args::{Args, LintArgs};
 use crate::commands::{check, scan};
 use crate::config::{self, Config};
-use crate::db::{self, Database};
+use crate::db::{self, Databases};
 use crate::error::{BrokenPipeErr, IoErr, Result};
 use crate::filemeta::{Extractor, FileMeta, ZipExtractor};
 use crate::scripts::{Requirements, Script, ScriptLoader};
@@ -17,18 +17,26 @@ use tokio::fs::read_dir;
 pub struct LintContext {
     config: Config,
     cwd: PathBuf,
+    databases: Arc<Databases>,
     scripts: ScriptLoader,
     system: Option<String>,
 }
 
 impl LintContext {
-    pub fn new(cwd: PathBuf, system: Option<&String>, config: Config) -> Self {
-        let scripts = ScriptLoader::new();
+    pub fn new(
+        cwd: PathBuf,
+        system: Option<&String>,
+        databases: Databases,
+        config: Config,
+        scripts: ScriptLoader,
+    ) -> Self {
         let system = system.cloned();
+        let databases = Arc::new(databases);
 
         Self {
             config,
             cwd,
+            databases,
             scripts,
             system,
         }
@@ -43,6 +51,10 @@ impl LintContext {
 
     pub fn scripts(&self) -> impl Iterator<Item = &Script> {
         self.scripts.iter()
+    }
+
+    pub fn script_requirements(&self) -> Requirements {
+        self.scripts.requirements()
     }
 
     pub fn config(&self) -> &Config {
@@ -64,15 +76,14 @@ impl LintContext {
         self.scripts.requirements().contains(Requirements::ARCHIVE)
     }
 
-    pub fn databases(&self) -> Arc<HashMap<String, Database>> {
-        todo!()
+    pub fn databases(&self) -> Arc<Databases> {
+        self.databases.clone()
     }
 }
 
 pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
     let config_path = args.config_path();
     let config = config::from_path(config_path).await?;
-    let db_path = args.cwd().join(config.db_dir());
     let (tx, rx) = mpsc::channel();
     let mut script_loader = ScriptLoader::new();
 
@@ -84,21 +95,31 @@ pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
     let on_message = |message: Message| tx.send(message).context(BrokenPipeErr);
     let hide_passes = lint_args.hide_passes;
     let ui_thread = spawn(move || Ui::new(rx, !hide_passes).run());
+
+    let on_message = |message: Message| tx.send(message).context(BrokenPipeErr);
+    let db_path = args.cwd().join(config.db_dir());
     let databases = if let Some(sys) = &args.system {
-        db::load_only(&db_path, &[sys.as_str()], &on_message).await?
+        db::load_only(&db_path, &[sys.as_str()], &on_message)
+            .await
+            .unwrap()
     } else {
-        db::load_all(&db_path, &on_message).await?
+        db::load_all(&db_path, &on_message).await.unwrap()
     };
 
-    let on_message = |message: Message| tx.send(message).context(BrokenPipeErr {});
-    let ctx = LintContext::new(args.cwd(), args.system.as_ref(), config);
+    let ctx = LintContext::new(
+        args.cwd(),
+        args.system.as_ref(),
+        databases,
+        config,
+        script_loader,
+    );
 
     if let Some(file) = lint_args.file.as_ref() {
         let start_time = Instant::now();
         let mut extractors = HashMap::<String, Box<dyn Extractor>>::new();
         let mut summary = Summary::new(start_time);
 
-        let read_archives = script_loader.requirements().contains(Requirements::ARCHIVE);
+        let read_archives = ctx.script_requirements().contains(Requirements::ARCHIVE);
         if read_archives {
             extractors.insert("zip".to_string(), Box::new(ZipExtractor));
         }
@@ -107,6 +128,7 @@ pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
         let file = FileMeta::from_path(system, ctx.config(), file, &extractors)
             .await
             .context(IoErr { path: file })?;
+
         let passed = check(&ctx, &file, on_message)?;
 
         if passed {

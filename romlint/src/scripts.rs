@@ -1,5 +1,5 @@
 use crate::{
-    db::Database,
+    db::{Database, Databases},
     filemeta::{ArchiveInfo, FileMeta},
     word_match::Tokens,
 };
@@ -31,6 +31,8 @@ impl ScriptLoader {
             .unwrap_or("")
             .to_owned();
         let requirements = Self::get_requirements(&src, &name).unwrap();
+
+        log::debug!("Loading script: {name}");
 
         self.scripts.push(Script {
             requirements,
@@ -121,11 +123,13 @@ pub struct Script {
     name: String,
 }
 
-pub fn exec_one(
-    script: &Script,
-    meta: &FileMeta,
-    databases: Arc<HashMap<String, Database>>,
-) -> Result<()> {
+impl std::fmt::Debug for Script {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
+pub fn exec_one(script: &Script, meta: &FileMeta, databases: Arc<Databases>) -> Result<()> {
     // Each (file,script) pair gets an isolated Lua context to run in
     let lua = Lua::new_with(StdLib::BASE | StdLib::TABLE | StdLib::STRING);
 
@@ -193,6 +197,7 @@ pub fn exec_one(
 
             let db_contains = scope.create_function(|_, ()| {
                 let has_db_requirement = script.requirements.contains(Requirements::FILE_DB);
+
                 if !has_db_requirement {
                     let err = RequirementError::new(Requirements::FILE_DB);
                     let err = rlua::Error::ExternalError(Arc::new(err));

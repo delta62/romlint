@@ -1,11 +1,11 @@
-use crate::args::{Args, LintArgs};
+use crate::args::{Args, LintArgs, Reporter};
 use crate::commands::{check, scan};
 use crate::config::{self, Config};
 use crate::db::{self, Databases};
 use crate::error::{BrokenPipeErr, IoErr, Result};
 use crate::filemeta::{Extractor, FileMeta, ZipExtractor};
 use crate::scripts::{Requirements, Script, ScriptLoader};
-use crate::ui::{Message, Summary, Ui};
+use crate::ui::{AnsiReporter, JsonReporter, Message, Summary, Ui};
 use snafu::ResultExt;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -92,11 +92,14 @@ pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
         script_loader.load(file.path()).await.unwrap();
     }
 
-    let on_message = |message: Message| tx.send(message).context(BrokenPipeErr);
     let hide_passes = lint_args.hide_passes;
-    let ui_thread = spawn(move || Ui::new(rx, !hide_passes).run());
-
+    let reporter: Box<dyn crate::ui::Reporter + Send + Sync> = match lint_args.reporter {
+        Reporter::Ansi => Box::new(AnsiReporter::new(!hide_passes)),
+        Reporter::Json => Box::new(JsonReporter::new()),
+    };
+    let ui_thread = spawn(move || Ui::new(rx, reporter).run());
     let on_message = |message: Message| tx.send(message).context(BrokenPipeErr);
+
     let db_path = args.cwd().join(config.db_dir());
     let databases = if let Some(sys) = &args.system {
         db::load_only(&db_path, &[sys.as_str()], &on_message)

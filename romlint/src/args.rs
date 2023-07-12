@@ -1,4 +1,4 @@
-use clap::{Args as ClapArgs, Parser, Subcommand};
+use clap::{Args as ClapArgs, Parser, Subcommand, ValueEnum};
 use std::path::{Path, PathBuf};
 
 /// A tool for enumerating and keeping ROMs organized
@@ -47,6 +47,14 @@ pub enum Command {
     Lint(LintArgs),
 }
 
+#[derive(Clone, Debug, ValueEnum)]
+pub enum Reporter {
+    /// Rich, color UI meant for interactive terminal sessions
+    Ansi,
+    /// JSON blob
+    Json,
+}
+
 #[derive(Clone, Debug, ClapArgs)]
 pub struct LintArgs {
     /// Only show output for files which are failing lints
@@ -55,4 +63,9 @@ pub struct LintArgs {
 
     /// Only lint the given file. If omitted, all files are linted.
     pub file: Option<String>,
+
+    /// How output should be formatted
+    #[clap(long, default_value_t = Reporter::Ansi)]
+    #[arg(value_enum)]
+    pub reporter: Reporter,
 }

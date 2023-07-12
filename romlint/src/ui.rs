@@ -2,22 +2,26 @@ use crate::ansi::{clear_line, move_to_line_start, move_up_lines, print_status};
 use crate::error::{IoErr, Result};
 use crate::linter::Diagnostic;
 use nu_ansi_term::Color::{Blue, Green, Red};
+use serde::Serialize;
 use snafu::prelude::*;
 use std::collections::HashMap;
 use std::time::Instant;
 use std::{sync::mpsc::Receiver, time::Duration};
 
-#[derive(Default)]
+#[derive(Default, Serialize)]
 pub struct SystemSummary {
     pass_count: usize,
     fail_count: usize,
 }
 
+#[derive(Serialize)]
 pub struct Summary {
     systems: HashMap<String, SystemSummary>,
     total_passes: usize,
     total_fails: usize,
+    #[serde(skip_serializing)]
     start_time: Instant,
+    #[serde(skip_serializing)]
     end_time: Option<Instant>,
 }
 
@@ -59,6 +63,13 @@ impl Report {
     }
 }
 
+#[derive(Serialize)]
+struct JsonReport<'a> {
+    diagnostics: &'a HashMap<String, Vec<Diagnostic>>,
+    passes: &'a Vec<String>,
+    summary: &'a Summary,
+}
+
 pub enum Message {
     Finished(Summary),
     SetStatus(String),
@@ -67,61 +78,152 @@ pub enum Message {
     Report(Report),
 }
 
+pub trait Reporter {
+    fn on_tick(&mut self) -> Result<()>;
+    fn on_message(&mut self, message: Message) -> Result<()>;
+}
+
+pub struct AnsiReporter {
+    icons: std::iter::Cycle<std::array::IntoIter<char, 8>>,
+    last_load_printed: bool,
+    loading_items: Vec<(String, bool)>,
+    show_passes: bool,
+    status: String,
+}
+
+impl AnsiReporter {
+    pub fn new(show_passes: bool) -> Self {
+        let icons = ['⣷', '⣯', '⣟', '⡿', '⢿', '⣻', '⣽', '⣾'].into_iter().cycle();
+        let status = "Initializing...".to_string();
+        let loading_items = Vec::new();
+        let last_load_printed = false;
+
+        Self {
+            icons,
+            last_load_printed,
+            loading_items,
+            show_passes,
+            status,
+        }
+    }
+}
+
+impl Reporter for AnsiReporter {
+    fn on_tick(&mut self) -> Result<()> {
+        let message = format!(
+            "{} >> {}",
+            self.icons.next().unwrap(),
+            Blue.paint(&self.status)
+        );
+
+        print_status(message).context(IoErr { path: "stdout" })
+    }
+
+    fn on_message(&mut self, message: Message) -> Result<()> {
+        clear_line().context(IoErr { path: "stdout" })?;
+        match message {
+            Message::StartProgress(_id, name) => {
+                println!();
+                self.loading_items.push((name, true))
+            }
+            Message::EndProgress(id) => {
+                if let Some((_, is_loading)) = self.loading_items.get_mut(id) {
+                    *is_loading = false;
+                }
+            }
+            Message::Finished(summary) => {
+                clear_line().context(IoErr { path: "stdout" })?;
+                println!();
+                print_summary(&summary);
+            }
+            Message::SetStatus(s) => self.status = s,
+            Message::Report(report) => {
+                move_to_line_start().context(IoErr { path: "stdout" })?;
+                print_report(&report, self.show_passes);
+            }
+        }
+
+        let done_loading = self.loading_items.iter().all(|(_, is_loading)| !is_loading);
+        if !done_loading || !self.last_load_printed {
+            print_loading_status(&self.loading_items);
+        }
+
+        self.last_load_printed = done_loading;
+
+        Ok(())
+    }
+}
+
+pub struct JsonReporter {
+    diagnostics: HashMap<String, Vec<Diagnostic>>,
+    passes: Vec<String>,
+}
+
+impl JsonReporter {
+    pub fn new() -> Self {
+        let diagnostics = HashMap::new();
+        let passes = Vec::new();
+
+        Self {
+            diagnostics,
+            passes,
+        }
+    }
+}
+
+impl Reporter for JsonReporter {
+    fn on_tick(&mut self) -> Result<()> {
+        Ok(())
+    }
+
+    fn on_message(&mut self, message: Message) -> Result<()> {
+        match message {
+            Message::Report(report) => {
+                if report.diagnostics.is_empty() {
+                    self.passes.push(report.path);
+                } else {
+                    self.diagnostics.insert(report.path, report.diagnostics);
+                }
+            }
+            Message::Finished(summary) => {
+                let report = JsonReport {
+                    summary: &summary,
+                    diagnostics: &self.diagnostics,
+                    passes: &self.passes,
+                };
+
+                let serialized = serde_json::to_string(&report).unwrap();
+                println!("{serialized}");
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+}
+
 pub struct Ui {
     channel: Receiver<Message>,
-    show_passes: bool,
+    reporter: Box<dyn Reporter>,
 }
 
 impl Ui {
-    pub fn new(channel: Receiver<Message>, show_passes: bool) -> Self {
-        Self {
-            channel,
-            show_passes,
-        }
+    pub fn new(channel: Receiver<Message>, reporter: Box<dyn Reporter>) -> Self {
+        Self { channel, reporter }
     }
 
-    pub fn run(self) -> Result<()> {
-        let mut icons = ['⣷', '⣯', '⣟', '⡿', '⢿', '⣻', '⣽', '⣾'].iter().cycle();
-        let mut status = "Initializing...".to_string();
-        let mut loading_items = Vec::new();
-        let mut last_load_printed = false;
-
+    pub fn run(mut self) -> Result<()> {
         'outer: loop {
             while let Ok(message) = self.channel.try_recv() {
-                clear_line().context(IoErr { path: "stdout" })?;
-                match message {
-                    Message::StartProgress(_id, name) => {
-                        println!();
-                        loading_items.push((name, true))
-                    }
-                    Message::EndProgress(id) => {
-                        if let Some((_, is_loading)) = loading_items.get_mut(id) {
-                            *is_loading = false;
-                        }
-                    }
-                    Message::Finished(summary) => {
-                        clear_line().context(IoErr { path: "stdout" })?;
-                        println!();
-                        print_summary(&summary);
-                        break 'outer;
-                    }
-                    Message::SetStatus(s) => status = s,
-                    Message::Report(report) => {
-                        move_to_line_start().context(IoErr { path: "stdout" })?;
-                        print_report(&report, self.show_passes);
-                    }
+                let done = matches!(message, Message::Finished(_));
+                self.reporter.on_message(message)?;
+
+                if done {
+                    break 'outer;
                 }
             }
 
-            let done_loading = loading_items.iter().all(|(_, is_loading)| !is_loading);
-            if !done_loading || !last_load_printed {
-                print_loading_status(&loading_items);
-            }
-
-            last_load_printed = done_loading;
-
-            let message = format!("{} >> {}", icons.next().unwrap(), Blue.paint(&status));
-            print_status(message).context(IoErr { path: "stdout" })?;
+            self.reporter.on_tick()?;
             std::thread::sleep(Duration::from_millis(100));
         }
 

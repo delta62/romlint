@@ -1,15 +1,12 @@
 use crate::{
-    db::{Database, Databases},
+    db::Databases,
     filemeta::{ArchiveInfo, FileMeta},
     word_match::Tokens,
 };
 use bitflags::bitflags;
 use futures::io;
 use rlua::{Function, Lua, Result, StdLib, ToLua, Value};
-use std::{
-    collections::HashMap, fs::Metadata, os::unix::prelude::MetadataExt, path::Path as FsPath,
-    sync::Arc,
-};
+use std::{fs::Metadata, os::unix::prelude::MetadataExt, path::Path as FsPath, sync::Arc};
 use tokio::fs::read_to_string;
 
 pub struct ScriptLoader {
@@ -452,7 +449,11 @@ fn lua_eq(a: &Value, b: &Value) -> bool {
             .unwrap_or(false),
         (Value::Integer(a), Value::Integer(b)) => a == b,
         (Value::Number(a), Value::Number(b)) => a == b,
-        _ => todo!(),
+        (Value::Nil, _) => false,
+        (_, Value::Nil) => false,
+        (a, b) => {
+            panic!("Cannot compare {:?} and {:?}", a, b);
+        }
     }
 }
 

@@ -1,7 +1,8 @@
 use crate::filemeta::FileMeta;
+use serde::Serialize;
 use std::path::PathBuf;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Diagnostic {
     pub message: String,
     pub path: PathBuf,

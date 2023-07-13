@@ -30,10 +30,6 @@ impl Args {
     pub fn config_path(&self) -> PathBuf {
         self.cwd().join("romlint.toml")
     }
-
-    pub fn system_path(&self, system: &str) -> PathBuf {
-        self.cwd().join(system)
-    }
 }
 
 /// The command to run
@@ -41,8 +37,6 @@ impl Args {
 pub enum Command {
     /// Dump all known ROM names to stdout
     Dump,
-    /// List local ROM names to stdout
-    Inventory,
     /// Run lints against local ROMs
     Lint(LintArgs),
 }

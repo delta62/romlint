@@ -23,7 +23,6 @@ async fn main() {
     let res = match args.command {
         Command::Dump => dump(args).await,
         Command::Lint(ref lint_args) => lint(&args, lint_args).await,
-        Command::Inventory => todo!(),
     };
 
     if let Err(err) = res {

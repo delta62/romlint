@@ -1,6 +1,6 @@
 use crate::args::{Args, LintArgs, Reporter};
 use crate::commands::{check, scan};
-use crate::config::{self, Config};
+use crate::config::Config;
 use crate::db::{self, Databases};
 use crate::error::{BrokenPipeErr, IoErr, Result};
 use crate::filemeta::{Extractor, FileMeta, ZipExtractor};
@@ -83,7 +83,7 @@ impl LintContext {
 
 pub async fn lint(args: &Args, lint_args: &LintArgs) -> Result<()> {
     let config_path = args.config_path();
-    let config = config::from_path(config_path).await?;
+    let config = Config::from_path(config_path).await?;
     let (tx, rx) = mpsc::channel();
     let mut script_loader = ScriptLoader::new();
 

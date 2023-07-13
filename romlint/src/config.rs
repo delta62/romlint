@@ -10,18 +10,21 @@ use std::{collections::HashMap, marker::PhantomData, path::Path};
 use tokio::fs::read_to_string;
 use toml::from_str;
 
-pub async fn from_path<P: AsRef<Path>>(path: P) -> Result<Config> {
-    let s = read_to_string(path.as_ref()).await.context(IoErr {
-        path: path.as_ref(),
-    })?;
-    from_str(s.as_str()).context(ConfigReadErr {})
-}
-
 #[derive(Debug, Deserialize)]
 pub struct Config {
     global: GlobalConfig,
     #[serde(rename = "system")]
     systems: HashMap<String, SystemConfig>,
+}
+
+impl Config {
+    pub async fn from_path<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let s = read_to_string(path.as_ref()).await.context(IoErr {
+            path: path.as_ref(),
+        })?;
+
+        from_str(s.as_str()).context(ConfigReadErr)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,6 +78,8 @@ impl<'cfg, 'lua> ToLua<'lua> for &ResolvedConfig<'cfg> {
     }
 }
 
+/// Deserialize either a string or a list of strings to `Vec<String>`. In the case of a string as
+/// input, a singleton `Vec` will be returned containing that string.
 fn string_or_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
 where
     D: Deserializer<'de>,

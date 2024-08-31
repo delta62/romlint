@@ -1,2 +1,3 @@
 [workspace]
 members = ["dir_walker", "dat", "romlint"]
+resolver = "2"

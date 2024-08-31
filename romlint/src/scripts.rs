@@ -5,7 +5,7 @@ use crate::{
 };
 use bitflags::bitflags;
 use futures::io;
-use rlua::{Function, Lua, Result, StdLib, ToLua, Value};
+use mlua::{Function, IntoLua, Lua, Result, StdLib, Value};
 use std::{fs::Metadata, os::unix::prelude::MetadataExt, path::Path as FsPath, sync::Arc};
 use tokio::fs::read_to_string;
 
@@ -47,27 +47,25 @@ impl ScriptLoader {
     }
 
     fn get_requirements(src: &str, name: &str) -> Result<Requirements> {
-        let lua = Lua::new_with(StdLib::BASE | StdLib::TABLE | StdLib::STRING);
-        lua.context(|ctx| {
-            ctx.load(src).set_name(name)?.exec()?;
+        let lua = Lua::new_with(StdLib::TABLE | StdLib::STRING, Default::default())?;
+        lua.load(src).set_name(name).exec()?;
 
-            let reqs = ctx
-                .globals()
-                .get::<&str, Vec<String>>("requires")?
-                .into_iter()
-                .fold(Requirements::empty(), |acc, r| match r.as_str() {
-                    "stat" => acc | Requirements::STAT,
-                    "path" => acc | Requirements::PATH,
-                    "archive" => acc | Requirements::ARCHIVE,
-                    "file_db" => acc | Requirements::FILE_DB,
-                    s => {
-                        log::warn!("Unknown requirement listed: '{s}'");
-                        acc
-                    }
-                });
+        let reqs = lua
+            .globals()
+            .get::<&str, Vec<String>>("requires")?
+            .into_iter()
+            .fold(Requirements::empty(), |acc, r| match r.as_str() {
+                "stat" => acc | Requirements::STAT,
+                "path" => acc | Requirements::PATH,
+                "archive" => acc | Requirements::ARCHIVE,
+                "file_db" => acc | Requirements::FILE_DB,
+                s => {
+                    log::warn!("Unknown requirement listed: '{s}'");
+                    acc
+                }
+            });
 
-            Ok(reqs)
-        })
+        Ok(reqs)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &Script> {
@@ -103,14 +101,14 @@ struct Stat {
     mode: u32,
 }
 
-impl<'lua> ToLua<'lua> for Stat {
-    fn to_lua(self, lua: rlua::Context<'lua>) -> Result<rlua::Value<'lua>> {
+impl<'lua> IntoLua<'lua> for Stat {
+    fn into_lua(self, lua: &'lua mlua::Lua) -> Result<mlua::Value<'lua>> {
         let table = lua.create_table()?;
         table.set("mode", self.mode & 0o777)?;
         table.set("is_dir", self.is_dir)?;
         table.set("is_file", self.is_file)?;
 
-        Ok(rlua::Value::Table(table))
+        Ok(mlua::Value::Table(table))
     }
 }
 
@@ -128,163 +126,160 @@ impl std::fmt::Debug for Script {
 
 pub fn exec_one(script: &Script, meta: &FileMeta, databases: Arc<Databases>) -> Result<()> {
     // Each (file,script) pair gets an isolated Lua context to run in
-    let lua = Lua::new_with(StdLib::BASE | StdLib::TABLE | StdLib::STRING);
+    let lua = Lua::new_with(StdLib::TABLE | StdLib::STRING, Default::default())?;
+    lua.scope(|scope| {
+        let globals = lua.globals();
+        let file = lua.create_table()?;
+        let api = lua.create_table()?;
 
-    lua.context(|ctx| {
-        ctx.scope(|scope| {
-            let globals = ctx.globals();
-            let file = ctx.create_table()?;
-            let api = ctx.create_table()?;
+        let assert_eq = lua.create_function(
+            |_, (expected, actual, detail): (Value, Value, Option<String>)| {
+                if lua_eq(&expected, &actual) {
+                    return Ok(());
+                }
 
-            let assert_eq = ctx.create_function(
-                |_, (expected, actual, detail): (Value, Value, Option<String>)| {
-                    if lua_eq(&expected, &actual) {
+                let err = AssertionError::expected(&expected, &actual, detail);
+                let err = mlua::Error::ExternalError(Arc::new(err));
+                Err(err)
+            },
+        )?;
+
+        let assert_ne = lua.create_function(
+            |_, (not_expected, actual, detail): (Value, Value, Option<String>)| {
+                if lua_eq(&not_expected, &actual) {
+                    let err = AssertionError::unexpected(&not_expected, detail);
+                    let err = mlua::Error::ExternalError(Arc::new(err));
+                    Err(err)?
+                }
+
+                Ok(())
+            },
+        )?;
+
+        let throw = lua.create_function(|_, detail: String| -> Result<()> {
+            let err = AssertionError::throw(detail);
+            let err = mlua::Error::ExternalError(Arc::new(err));
+            Err(err)
+        })?;
+
+        let assert_contains = lua.create_function(
+            |_, (haystack, needle, detail): (Vec<Value>, Value, Option<String>)| {
+                for item in haystack {
+                    if lua_eq(&item, &needle) {
                         return Ok(());
                     }
+                }
 
-                    let err = AssertionError::expected(&expected, &actual, detail);
-                    let err = rlua::Error::ExternalError(Arc::new(err));
-                    Err(err)
-                },
-            )?;
+                let detail = detail.unwrap_or_else(|| {
+                    format!("Couldn't find '{}' in collection", fmt_lua(&needle),)
+                });
 
-            let assert_ne = ctx.create_function(
-                |_, (not_expected, actual, detail): (Value, Value, Option<String>)| {
-                    if lua_eq(&not_expected, &actual) {
-                        let err = AssertionError::unexpected(&not_expected, detail);
-                        let err = rlua::Error::ExternalError(Arc::new(err));
-                        Err(err)?
-                    }
-
-                    Ok(())
-                },
-            )?;
-
-            let throw = ctx.create_function(|_, detail: String| -> Result<()> {
-                let err = AssertionError::throw(detail);
-                let err = rlua::Error::ExternalError(Arc::new(err));
+                let err = AssertionError::with_message(detail);
+                let err = mlua::Error::ExternalError(Arc::new(err));
                 Err(err)
-            })?;
+            },
+        )?;
 
-            let assert_contains = ctx.create_function(
-                |_, (haystack, needle, detail): (Vec<Value>, Value, Option<String>)| {
-                    for item in haystack {
-                        if lua_eq(&item, &needle) {
-                            return Ok(());
-                        }
-                    }
+        api.set("assert_eq", assert_eq)?;
+        api.set("assert_ne", assert_ne)?;
+        api.set("assert_contains", assert_contains)?;
+        api.set("throw", throw)?;
 
-                    let detail = detail.unwrap_or_else(|| {
-                        format!("Couldn't find '{}' in collection", fmt_lua(&needle),)
-                    });
+        api.set("system", meta.system())?;
+        api.set("config", meta.config())?;
 
-                    let err = AssertionError::with_message(detail);
-                    let err = rlua::Error::ExternalError(Arc::new(err));
-                    Err(err)
-                },
-            )?;
+        let db_contains = scope.create_function(|_, ()| {
+            let has_db_requirement = script.requirements.contains(Requirements::FILE_DB);
 
-            api.set("assert_eq", assert_eq)?;
-            api.set("assert_ne", assert_ne)?;
-            api.set("assert_contains", assert_contains)?;
-            api.set("throw", throw)?;
+            if !has_db_requirement {
+                let err = RequirementError::new(Requirements::FILE_DB);
+                let err = mlua::Error::ExternalError(Arc::new(err));
+                Err(err)?;
+            }
 
-            api.set("system", meta.system())?;
-            api.set("config", meta.config())?;
+            let stem = meta.path().file_stem().and_then(|s| s.to_str());
+            let result = match stem {
+                Some(stem) => meta
+                    .system()
+                    .and_then(|sys| databases.as_ref().get(sys))
+                    .map(|db| db.contains(stem))
+                    .unwrap_or_default(),
+                None => false,
+            };
 
-            let db_contains = scope.create_function(|_, ()| {
-                let has_db_requirement = script.requirements.contains(Requirements::FILE_DB);
+            Ok(result)
+        })?;
 
-                if !has_db_requirement {
-                    let err = RequirementError::new(Requirements::FILE_DB);
-                    let err = rlua::Error::ExternalError(Arc::new(err));
-                    Err(err)?;
+        api.set("db_contains", db_contains)?;
+
+        let similar_files = scope.create_function(|_, ()| {
+            let has_db_requirement = script.requirements.contains(Requirements::FILE_DB);
+            if !has_db_requirement {
+                let err = RequirementError::new(Requirements::FILE_DB);
+                let err = mlua::Error::ExternalError(Arc::new(err));
+                Err(err)?;
+            }
+
+            let db = meta.system().and_then(|sys| databases.as_ref().get(sys));
+            let path_str = meta.path().to_str();
+
+            match (db, path_str) {
+                (Some(db), Some(path)) => {
+                    let file_tokens = Tokens::from_str(path);
+                    let similar_titles = db.similar_to(&file_tokens);
+                    let similar = similar_titles
+                        .into_iter()
+                        .map(|title| title.to_string())
+                        .collect::<Vec<_>>();
+                    Ok(similar)
                 }
+                _ => Ok(vec![]),
+            }
+        })?;
 
-                let stem = meta.path().file_stem().and_then(|s| s.to_str());
-                let result = match stem {
-                    Some(stem) => meta
-                        .system()
-                        .and_then(|sys| databases.as_ref().get(sys))
-                        .map(|db| db.contains(stem))
-                        .unwrap_or_default(),
-                    None => false,
-                };
+        api.set("similar_files", similar_files)?;
 
-                Ok(result)
-            })?;
+        let stat = scope.create_function(|_, ()| {
+            if !script.requirements.contains(Requirements::STAT) {
+                let err = RequirementError::new(Requirements::STAT);
+                let err = mlua::Error::ExternalError(Arc::new(err));
+                Err(err)?;
+            }
 
-            api.set("db_contains", db_contains)?;
+            let stat: Stat = meta.metadata().into();
+            Ok(stat)
+        })?;
 
-            let similar_files = scope.create_function(|_, ()| {
-                let has_db_requirement = script.requirements.contains(Requirements::FILE_DB);
-                if !has_db_requirement {
-                    let err = RequirementError::new(Requirements::FILE_DB);
-                    let err = rlua::Error::ExternalError(Arc::new(err));
-                    Err(err)?;
-                }
+        file.set("stat", stat)?;
 
-                let db = meta.system().and_then(|sys| databases.as_ref().get(sys));
-                let path_str = meta.path().to_str();
+        let path = scope.create_function(|_, ()| {
+            if !script.requirements.contains(Requirements::PATH) {
+                let err = RequirementError::new(Requirements::PATH);
+                let err = mlua::Error::ExternalError(Arc::new(err));
+                Err(err)?;
+            }
 
-                match (db, path_str) {
-                    (Some(db), Some(path)) => {
-                        let file_tokens = Tokens::from_str(path);
-                        let similar_titles = db.similar_to(&file_tokens);
-                        let similar = similar_titles
-                            .into_iter()
-                            .map(|title| title.to_string())
-                            .collect::<Vec<_>>();
-                        Ok(similar)
-                    }
-                    _ => Ok(vec![]),
-                }
-            })?;
+            let path: Path = meta.path().into();
+            Ok(path)
+        })?;
 
-            api.set("similar_files", similar_files)?;
+        file.set("path", path)?;
 
-            let stat = scope.create_function(|_, ()| {
-                if !script.requirements.contains(Requirements::STAT) {
-                    let err = RequirementError::new(Requirements::STAT);
-                    let err = rlua::Error::ExternalError(Arc::new(err));
-                    Err(err)?;
-                }
+        let archive = scope.create_function(|_, ()| {
+            if !script.requirements.contains(Requirements::ARCHIVE) {
+                let err = RequirementError::new(Requirements::ARCHIVE);
+                let err = mlua::Error::ExternalError(Arc::new(err));
+                Err(err)?;
+            }
 
-                let stat: Stat = meta.metadata().into();
-                Ok(stat)
-            })?;
+            let archive: Archive = meta.archive().into();
+            Ok(archive)
+        })?;
 
-            file.set("stat", stat)?;
+        file.set("archive", archive)?;
 
-            let path = scope.create_function(|_, ()| {
-                if !script.requirements.contains(Requirements::PATH) {
-                    let err = RequirementError::new(Requirements::PATH);
-                    let err = rlua::Error::ExternalError(Arc::new(err));
-                    Err(err)?;
-                }
-
-                let path: Path = meta.path().into();
-                Ok(path)
-            })?;
-
-            file.set("path", path)?;
-
-            let archive = scope.create_function(|_, ()| {
-                if !script.requirements.contains(Requirements::ARCHIVE) {
-                    let err = RequirementError::new(Requirements::ARCHIVE);
-                    let err = rlua::Error::ExternalError(Arc::new(err));
-                    Err(err)?;
-                }
-
-                let archive: Archive = meta.archive().into();
-                Ok(archive)
-            })?;
-
-            file.set("archive", archive)?;
-
-            ctx.load(&script.src).set_name(&script.name)?.exec()?;
-            globals.get::<&str, Function>("lint")?.call((file, api))
-        })
+        lua.load(&script.src).set_name(&script.name).exec()?;
+        globals.get::<&str, Function>("lint")?.call((file, api))
     })
 }
 
@@ -292,10 +287,9 @@ struct Archive {
     files: Option<Vec<String>>,
 }
 
-impl<'lua> ToLua<'lua> for Archive {
-    fn to_lua(self, lua: rlua::Context<'lua>) -> Result<Value<'lua>> {
+impl<'lua> IntoLua<'lua> for Archive {
+    fn into_lua(self, lua: &'lua mlua::Lua) -> Result<Value<'lua>> {
         let table = lua.create_table()?;
-
         table.set("files", self.files)?;
 
         Ok(Value::Table(table))
@@ -320,15 +314,15 @@ struct Path {
     path: String,
 }
 
-impl<'lua> ToLua<'lua> for Path {
-    fn to_lua(self, lua: rlua::Context<'lua>) -> Result<Value<'lua>> {
+impl<'lua> IntoLua<'lua> for Path {
+    fn into_lua(self, lua: &'lua mlua::Lua) -> Result<Value<'lua>> {
         let table = lua.create_table()?;
 
         table.set("extension", self.extension)?;
         table.set("stem", self.stem)?;
         table.set("path", self.path)?;
 
-        Ok(rlua::Value::Table(table))
+        Ok(mlua::Value::Table(table))
     }
 }
 

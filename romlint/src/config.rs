@@ -1,5 +1,5 @@
 use crate::error::{ConfigReadErr, IoErr, Result};
-use rlua::ToLua;
+use mlua::IntoLua;
 use serde::{
     de::{self, value::SeqAccessDeserializer, Visitor},
     Deserialize, Deserializer,
@@ -64,8 +64,8 @@ pub struct ResolvedConfig<'a> {
     pub raw_format: Vec<&'a str>,
 }
 
-impl<'cfg, 'lua> ToLua<'lua> for &ResolvedConfig<'cfg> {
-    fn to_lua(self, lua: rlua::Context<'lua>) -> rlua::Result<rlua::Value<'lua>> {
+impl<'cfg, 'lua> IntoLua<'lua> for &ResolvedConfig<'cfg> {
+    fn into_lua(self, lua: &'lua mlua::Lua) -> mlua::Result<mlua::Value<'lua>> {
         let table = lua.create_table()?;
         table.set("archive_format", self.archive_format.clone())?;
         table.set(
@@ -74,7 +74,7 @@ impl<'cfg, 'lua> ToLua<'lua> for &ResolvedConfig<'cfg> {
         )?;
         table.set("raw_format", self.raw_format.clone())?;
 
-        Ok(rlua::Value::Table(table))
+        Ok(mlua::Value::Table(table))
     }
 }
 

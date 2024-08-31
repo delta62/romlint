@@ -37,8 +37,8 @@ where
     Ok(passed)
 }
 
-fn create_diagnostic(file: &FileMeta, err: rlua::Error) -> Diagnostic {
-    use rlua::Error::*;
+fn create_diagnostic(file: &FileMeta, err: mlua::Error) -> Diagnostic {
+    use mlua::Error::*;
 
     let message = match err {
         CallbackError { cause, .. } => format!("{cause}"),
